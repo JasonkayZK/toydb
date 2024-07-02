@@ -2,7 +2,7 @@ Query: SELECT 1 + 2 * 3, 'abc' LIKE 'x%' AS nope
 
 Explain:
 Projection: 7, FALSE
-└─ Nothing
+└─ EmptyRow
 
 Result: ["?", "nope"]
 [Integer(7), Boolean(false)]
@@ -10,14 +10,14 @@ Result: ["?", "nope"]
 AST: Select {
     select: [
         (
-            Operation(
+            Operator(
                 Add(
                     Literal(
                         Integer(
                             1,
                         ),
                     ),
-                    Operation(
+                    Operator(
                         Multiply(
                             Literal(
                                 Integer(
@@ -36,7 +36,7 @@ AST: Select {
             None,
         ),
         (
-            Operation(
+            Operator(
                 Like(
                     Literal(
                         String(
@@ -64,76 +64,84 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Projection {
-        source: Nothing,
+Plan: Select {
+    root: Projection {
+        source: EmptyRow,
         expressions: [
-            (
-                Add(
-                    Constant(
-                        Integer(
-                            1,
-                        ),
-                    ),
-                    Multiply(
-                        Constant(
-                            Integer(
-                                2,
-                            ),
-                        ),
-                        Constant(
-                            Integer(
-                                3,
-                            ),
-                        ),
-                    ),
-                ),
-                None,
-            ),
-            (
-                Like(
-                    Constant(
-                        String(
-                            "abc",
-                        ),
-                    ),
-                    Constant(
-                        String(
-                            "x%",
-                        ),
-                    ),
-                ),
-                Some(
-                    "nope",
-                ),
-            ),
-        ],
-    },
-)
-
-Optimized plan: Plan(
-    Projection {
-        source: Nothing,
-        expressions: [
-            (
+            Add(
                 Constant(
                     Integer(
-                        7,
+                        1,
                     ),
                 ),
-                None,
+                Multiply(
+                    Constant(
+                        Integer(
+                            2,
+                        ),
+                    ),
+                    Constant(
+                        Integer(
+                            3,
+                        ),
+                    ),
+                ),
             ),
-            (
+            Like(
                 Constant(
-                    Boolean(
-                        false,
+                    String(
+                        "abc",
                     ),
                 ),
-                Some(
-                    "nope",
+                Constant(
+                    String(
+                        "x%",
+                    ),
                 ),
             ),
         ],
+        labels: [
+            None,
+            Unqualified(
+                "nope",
+            ),
+        ],
     },
-)
+    labels: [
+        None,
+        Unqualified(
+            "nope",
+        ),
+    ],
+}
+
+Optimized plan: Select {
+    root: Projection {
+        source: EmptyRow,
+        expressions: [
+            Constant(
+                Integer(
+                    7,
+                ),
+            ),
+            Constant(
+                Boolean(
+                    false,
+                ),
+            ),
+        ],
+        labels: [
+            None,
+            Unqualified(
+                "nope",
+            ),
+        ],
+    },
+    labels: [
+        None,
+        Unqualified(
+            "nope",
+        ),
+    ],
+}
 

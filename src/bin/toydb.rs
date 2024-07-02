@@ -6,26 +6,28 @@
 
 #![warn(clippy::all)]
 
-use clap::{app_from_crate, crate_authors, crate_description, crate_name, crate_version};
 use serde_derive::Deserialize;
 use std::collections::HashMap;
-use toydb::error::{Error, Result};
+use toydb::errinput;
+use toydb::error::Result;
+use toydb::raft;
+use toydb::sql;
 use toydb::storage;
 use toydb::Server;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let opts = app_from_crate!()
+const COMPACT_MIN_BYTES: u64 = 1024 * 1024;
+
+fn main() -> Result<()> {
+    let args = clap::command!()
         .arg(
-            clap::Arg::with_name("config")
-                .short("c")
+            clap::Arg::new("config")
+                .short('c')
                 .long("config")
                 .help("Configuration file path")
-                .takes_value(true)
-                .default_value("/etc/toydb.yaml"),
+                .default_value("config/toydb.yaml"),
         )
         .get_matches();
-    let cfg = Config::new(opts.value_of("config").unwrap())?;
+    let cfg = Config::new(args.get_one::<String>("config").unwrap().as_ref())?;
 
     let loglevel = cfg.log_level.parse::<simplelog::LevelFilter>()?;
     let mut logconfig = simplelog::ConfigBuilder::new();
@@ -35,53 +37,61 @@ async fn main() -> Result<()> {
     simplelog::SimpleLogger::init(loglevel, logconfig.build())?;
 
     let path = std::path::Path::new(&cfg.data_dir);
-    let raft_store: Box<dyn storage::log::Store> = match cfg.storage_raft.as_str() {
-        "hybrid" | "" => Box::new(storage::log::Hybrid::new(path, cfg.sync)?),
-        "memory" => Box::new(storage::log::Memory::new()),
-        name => return Err(Error::Config(format!("Unknown Raft storage engine {}", name))),
+    let raft_log = match cfg.storage_raft.as_str() {
+        "bitcask" | "" => raft::Log::new(Box::new(storage::BitCask::new_compact(
+            path.join("log"),
+            cfg.compact_threshold,
+            COMPACT_MIN_BYTES,
+        )?))?,
+        "memory" => raft::Log::new(Box::new(storage::Memory::new()))?,
+        name => return errinput!("invalid Raft storage engine {name}"),
     };
-    let sql_store: Box<dyn storage::kv::Store> = match cfg.storage_sql.as_str() {
-        "memory" | "" => Box::new(storage::kv::Memory::new()),
-        "stdmemory" => Box::new(storage::kv::StdMemory::new()),
-        name => return Err(Error::Config(format!("Unknown SQL storage engine {}", name))),
+    let raft_state: Box<dyn raft::State> = match cfg.storage_sql.as_str() {
+        "bitcask" | "" => {
+            let engine = storage::BitCask::new_compact(
+                path.join("state"),
+                cfg.compact_threshold,
+                COMPACT_MIN_BYTES,
+            )?;
+            Box::new(sql::engine::Raft::new_state(engine)?)
+        }
+        "memory" => {
+            let engine = storage::Memory::new();
+            Box::new(sql::engine::Raft::new_state(engine)?)
+        }
+        name => return errinput!("invalid SQL storage engine {name}"),
     };
 
-    Server::new(&cfg.id, cfg.peers, raft_store, sql_store)
-        .await?
-        .listen(&cfg.listen_sql, &cfg.listen_raft)
-        .await?
-        .serve()
-        .await
+    Server::new(cfg.id, cfg.peers, raft_log, raft_state)?.serve(&cfg.listen_raft, &cfg.listen_sql)
 }
 
 #[derive(Debug, Deserialize)]
 struct Config {
-    id: String,
-    peers: HashMap<String, String>,
+    id: raft::NodeID,
+    peers: HashMap<raft::NodeID, String>,
     listen_sql: String,
     listen_raft: String,
     log_level: String,
     data_dir: String,
-    sync: bool,
+    compact_threshold: f64,
     storage_raft: String,
     storage_sql: String,
 }
 
 impl Config {
     fn new(file: &str) -> Result<Self> {
-        let mut c = config::Config::new();
-        c.set_default("id", "toydb")?;
-        c.set_default("peers", HashMap::<String, String>::new())?;
-        c.set_default("listen_sql", "0.0.0.0:9605")?;
-        c.set_default("listen_raft", "0.0.0.0:9705")?;
-        c.set_default("log_level", "info")?;
-        c.set_default("data_dir", "/var/lib/toydb")?;
-        c.set_default("sync", true)?;
-        c.set_default("storage_raft", "hybrid")?;
-        c.set_default("storage_sql", "memory")?;
-
-        c.merge(config::File::with_name(file))?;
-        c.merge(config::Environment::with_prefix("TOYDB"))?;
-        Ok(c.try_into()?)
+        Ok(config::Config::builder()
+            .set_default("id", "1")?
+            .set_default("listen_sql", "0.0.0.0:9605")?
+            .set_default("listen_raft", "0.0.0.0:9705")?
+            .set_default("log_level", "info")?
+            .set_default("data_dir", "data")?
+            .set_default("compact_threshold", 0.2)?
+            .set_default("storage_raft", "bitcask")?
+            .set_default("storage_sql", "bitcask")?
+            .add_source(config::File::with_name(file))
+            .add_source(config::Environment::with_prefix("TOYDB"))
+            .build()?
+            .try_deserialize()?)
     }
 }

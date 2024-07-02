@@ -1,11 +1,10 @@
-///! Tests for the SQL query engine. Runs SQL queries against an in-memory database,
-///! and compares the results with golden files stored under tests/sql/query/
-use toydb::error::{Error, Result};
-use toydb::sql::engine::{Engine, Mode, Transaction};
-use toydb::sql::execution::ResultSet;
+//! Tests for the SQL query engine. Runs SQL queries against an in-memory database,
+//! and compares the results with golden files stored under tests/sql/query/
+use toydb::errdata;
+use toydb::error::Result;
+use toydb::sql::engine::{Engine, StatementResult, Transaction};
 use toydb::sql::parser::Parser;
-use toydb::sql::plan::Plan;
-use toydb::sql::types::Row;
+use toydb::sql::planner::Plan;
 
 use goldenfile::Mint;
 use std::io::Write;
@@ -76,31 +75,24 @@ macro_rules! test_query {
 
             write!(f, "Query: {}\n\n", $query)?;
 
-            let mut txn = engine.begin(Mode::ReadWrite)?;
+            let mut txn = engine.begin()?;
 
             // First, just try to generate a plan and execute it
             let result = Parser::new($query).parse()
                 .and_then(|ast| Plan::build(ast, &mut txn))
-                .and_then(|plan| plan.optimize(&mut txn))
+                .and_then(|plan| plan.optimize())
                 .and_then(|plan| {
                     write!(f, "Explain:\n{}\n\n", plan)?;
-                    plan.execute(&mut txn)
+                    plan.execute(&mut txn).and_then(|r| r.try_into())
                 });
 
             match result {
-                Ok(ResultSet::Query{columns, rows}) => {
-                    let rows: Vec<Row> = match rows.collect() {
-                        Ok(rows) => rows,
-                        Err(err) => {
-                            write!(f, " {:?}", err)?;
-                            return Ok(())
-                        }
-                    };
+                Ok(StatementResult::Select{columns, rows}) => {
                     write!(f, "Result:")?;
                     if !columns.is_empty() || !rows.is_empty() {
                         write!(f, " {:?}\n", columns
                             .into_iter()
-                            .map(|c| c.name.unwrap_or_else(|| "?".to_string()))
+                            .map(|c| c.as_header())
                             .collect::<Vec<_>>())?;
                         for row in rows {
                             write!(f, "{:?}\n", row)?;
@@ -109,10 +101,8 @@ macro_rules! test_query {
                         write!(f, " <none>\n")?;
                     }
                 }
-                Ok(r) => return Err(Error::Internal(format!("Unexpected result {:?}\n", r))),
-                Err(err) => {
-                    write!(f, "Error: {}\n", err)?;
-                }
+                Ok(r) => return errdata!("unexpected result {r:?}\n"),
+                Err(err) => write!(f, "Error: {err}\n")?,
             }
             write!(f, "\n")?;
 
@@ -138,7 +128,7 @@ macro_rules! test_query {
             write!(f, "{:#?}\n\n", plan)?;
 
             write!(f, "Optimized plan: ")?;
-            let plan = match plan.optimize(&mut txn) {
+            let plan = match plan.optimize() {
                 Ok(plan) => plan,
                 Err(err) => {
                     write!(f, "{:?}", err)?;
@@ -322,6 +312,7 @@ test_query! {
             INNER JOIN genres g ON m.genre_id = g.id AND g.id = 1
             INNER JOIN studios s ON m.studio_id = s.id AND s.id = 4
         ORDER BY m.title"#,
+    // TODO: deal with the duplicates here.
     join_inner_multi_same: r#"
         SELECT m.id, m.title, g.name AS genre, s.name AS studio, m.rating
         FROM movies m JOIN genres g ON m.genre_id = g.id,

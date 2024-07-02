@@ -2,7 +2,7 @@ Query: SELECT 1 AS a, 2 AS a
 
 Explain:
 Projection: 1, 2
-└─ Nothing
+└─ EmptyRow
 
 Result: ["a", "a"]
 [Integer(1), Integer(2)]
@@ -39,59 +39,71 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Projection {
-        source: Nothing,
+Plan: Select {
+    root: Projection {
+        source: EmptyRow,
         expressions: [
-            (
-                Constant(
-                    Integer(
-                        1,
-                    ),
-                ),
-                Some(
-                    "a",
+            Constant(
+                Integer(
+                    1,
                 ),
             ),
-            (
-                Constant(
-                    Integer(
-                        2,
-                    ),
-                ),
-                Some(
-                    "a",
+            Constant(
+                Integer(
+                    2,
                 ),
             ),
         ],
+        labels: [
+            Unqualified(
+                "a",
+            ),
+            Unqualified(
+                "a",
+            ),
+        ],
     },
-)
+    labels: [
+        Unqualified(
+            "a",
+        ),
+        Unqualified(
+            "a",
+        ),
+    ],
+}
 
-Optimized plan: Plan(
-    Projection {
-        source: Nothing,
+Optimized plan: Select {
+    root: Projection {
+        source: EmptyRow,
         expressions: [
-            (
-                Constant(
-                    Integer(
-                        1,
-                    ),
-                ),
-                Some(
-                    "a",
+            Constant(
+                Integer(
+                    1,
                 ),
             ),
-            (
-                Constant(
-                    Integer(
-                        2,
-                    ),
-                ),
-                Some(
-                    "a",
+            Constant(
+                Integer(
+                    2,
                 ),
             ),
         ],
+        labels: [
+            Unqualified(
+                "a",
+            ),
+            Unqualified(
+                "a",
+            ),
+        ],
     },
-)
+    labels: [
+        Unqualified(
+            "a",
+        ),
+        Unqualified(
+            "a",
+        ),
+    ],
+}
 

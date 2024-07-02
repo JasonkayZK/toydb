@@ -1,0 +1,92 @@
+# scan works on an empty engine, even when given indexes.
+scan
+scan 3..7
+---
+ok
+
+# Append a few entries.
+set_term 1
+append
+append foo
+set_term 2
+append bar
+---
+append → 1@1 None
+append → 2@1 foo
+append → 3@2 bar
+
+# Full scan.
+scan
+---
+1@1 None
+2@1 foo
+3@2 bar
+
+# Start bound.
+scan 2..
+---
+2@1 foo
+3@2 bar
+
+scan 4..
+---
+ok
+
+scan 0..
+---
+1@1 None
+2@1 foo
+3@2 bar
+
+# End bound.
+scan "..2"
+---
+1@1 None
+
+scan "..=2"
+---
+1@1 None
+2@1 foo
+
+scan "..7"
+---
+1@1 None
+2@1 foo
+3@2 bar
+
+scan "..1"
+---
+ok
+
+scan "..0"
+---
+ok
+
+# Both bounds.
+scan 1..2
+---
+1@1 None
+
+scan "1..=2"
+---
+1@1 None
+2@1 foo
+
+scan 0..7
+---
+1@1 None
+2@1 foo
+3@2 bar
+
+scan 1..1
+---
+ok
+
+# Bounds panics.
+!scan 1..0
+---
+Panic: range start is greater than range end in BTreeMap
+
+!scan 7..3
+---
+Panic: range start is greater than range end in BTreeMap

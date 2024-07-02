@@ -1,27 +1,28 @@
-use super::super::types::DataType;
 use crate::error::Result;
+use crate::sql::types::DataType;
 
 use std::collections::BTreeMap;
-use std::mem::replace;
 
-/// Statements
-#[derive(Clone, Debug, PartialEq)]
-#[allow(clippy::large_enum_variant)]
+/// The statement AST is the root node of the AST tree, which describes the
+/// syntactic structure of a SQL query. It is passed to the planner, which
+/// validates its contents and converts it into an execution plan.
+#[derive(Debug)]
 pub enum Statement {
     Begin {
-        readonly: bool,
-        version: Option<u64>,
+        read_only: bool,
+        as_of: Option<u64>,
     },
     Commit,
     Rollback,
     Explain(Box<Statement>),
-
     CreateTable {
         name: String,
         columns: Vec<Column>,
     },
-    DropTable(String),
-
+    DropTable {
+        name: String,
+        if_exists: bool,
+    },
     Delete {
         table: String,
         r#where: Option<Expression>,
@@ -33,13 +34,12 @@ pub enum Statement {
     },
     Update {
         table: String,
-        set: BTreeMap<String, Expression>,
+        set: BTreeMap<String, Expression>, // BTreeMap for test determinism
         r#where: Option<Expression>,
     },
-
     Select {
         select: Vec<(Expression, Option<String>)>,
-        from: Vec<FromItem>,
+        from: Vec<From>,
         r#where: Option<Expression>,
         group_by: Vec<Expression>,
         having: Option<Expression>,
@@ -49,32 +49,15 @@ pub enum Statement {
     },
 }
 
-/// A FROM item
-#[derive(Clone, Debug, PartialEq)]
-pub enum FromItem {
-    Table {
-        name: String,
-        alias: Option<String>,
-    },
-    Join {
-        left: Box<FromItem>,
-        right: Box<FromItem>,
-        r#type: JoinType,
-        predicate: Option<Expression>,
-    },
+/// A FROM item: a table or join.
+#[derive(Debug)]
+pub enum From {
+    Table { name: String, alias: Option<String> },
+    Join { left: Box<From>, right: Box<From>, r#type: JoinType, predicate: Option<Expression> },
 }
 
-/// A JOIN type
-#[derive(Clone, Debug, PartialEq)]
-pub enum JoinType {
-    Cross,
-    Inner,
-    Left,
-    Right,
-}
-
-/// A column
-#[derive(Clone, Debug, PartialEq)]
+/// A CREATE TABLE column definition.
+#[derive(Debug)]
 pub struct Column {
     pub name: String,
     pub datatype: DataType,
@@ -86,36 +69,50 @@ pub struct Column {
     pub references: Option<String>,
 }
 
-/// Sort orders
-#[derive(Clone, Debug, PartialEq)]
+/// JOIN types.
+#[derive(Debug, PartialEq)]
+pub enum JoinType {
+    Cross,
+    Inner,
+    Left,
+    Right,
+}
+
+impl JoinType {
+    // If true, the join is an outer join -- rows with no join match are emitted
+    // with a NULL match.
+    pub fn is_outer(&self) -> bool {
+        match self {
+            Self::Left | Self::Right => true,
+            Self::Cross | Self::Inner => false,
+        }
+    }
+}
+
+/// Sort orders.
+#[derive(Debug)]
 pub enum Order {
     Ascending,
     Descending,
 }
 
-/// Expressions
+/// Expressions. Can be nested.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
+    /// A field reference, with an optional table qualifier.
     Field(Option<String>, String),
-    Column(usize), // only used during plan building to break off expression subtrees
+    /// A column index (only used during planning to break off subtrees).
+    /// TODO: get rid of this, planning shouldn't modify the AST.
+    Column(usize),
+    /// A literal value.
     Literal(Literal),
+    /// A function call (name and parameters).
     Function(String, Vec<Expression>),
-    Operation(Operation),
+    /// An operator.
+    Operator(Operator),
 }
 
-impl From<Literal> for Expression {
-    fn from(literal: Literal) -> Self {
-        Self::Literal(literal)
-    }
-}
-
-impl From<Operation> for Expression {
-    fn from(op: Operation) -> Self {
-        Self::Operation(op)
-    }
-}
-
-/// Literals
+/// Expression literals.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Null,
@@ -125,15 +122,17 @@ pub enum Literal {
     String(String),
 }
 
-/// Operations (done by operators)
+/// Expression operators.
+///
+/// Since this is a recursive data structure, we have to box each child
+/// expression, which incurs a heap allocation. There are clever ways to get
+/// around this, but we keep it simple.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Operation {
-    // Logical operators
+pub enum Operator {
     And(Box<Expression>, Box<Expression>),
     Not(Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
 
-    // Comparison operators
     Equal(Box<Expression>, Box<Expression>),
     GreaterThan(Box<Expression>, Box<Expression>),
     GreaterThanOrEqual(Box<Expression>, Box<Expression>),
@@ -142,85 +141,77 @@ pub enum Operation {
     LessThanOrEqual(Box<Expression>, Box<Expression>),
     NotEqual(Box<Expression>, Box<Expression>),
 
-    // Mathematical operators
     Add(Box<Expression>, Box<Expression>),
-    Assert(Box<Expression>),
     Divide(Box<Expression>, Box<Expression>),
     Exponentiate(Box<Expression>, Box<Expression>),
     Factorial(Box<Expression>),
+    Identity(Box<Expression>),
     Modulo(Box<Expression>, Box<Expression>),
     Multiply(Box<Expression>, Box<Expression>),
     Negate(Box<Expression>),
     Subtract(Box<Expression>, Box<Expression>),
 
-    // String operators
     Like(Box<Expression>, Box<Expression>),
 }
 
 impl Expression {
-    /// Walks the expression tree while calling a closure. Returns true as soon as the closure
-    /// returns true. This is the inverse of walk().
-    pub fn contains<F: Fn(&Expression) -> bool>(&self, visitor: &F) -> bool {
-        !self.walk(&|e| !visitor(e))
-    }
-
-    /// Replaces the expression with result of the closure. Helper function for transform().
-    fn replace_with<F: FnMut(Self) -> Result<Self>>(&mut self, mut f: F) -> Result<()> {
-        // Temporarily replace expression with a null value, in case closure panics. May consider
-        // replace_with crate if this hampers performance.
-        let expr = replace(self, Expression::Literal(Literal::Null));
-        *self = f(expr)?;
-        Ok(())
-    }
-
-    /// Transforms the expression tree by applying a closure before and after descending.
+    /// Transforms the expression tree depth-first by applying a closure before
+    /// and after descending.
+    ///
+    /// TODO: make closures non-mut.
     pub fn transform<B, A>(mut self, before: &mut B, after: &mut A) -> Result<Self>
     where
         B: FnMut(Self) -> Result<Self>,
         A: FnMut(Self) -> Result<Self>,
     {
-        use Operation::*;
+        use Operator::*;
         self = before(self)?;
-        match &mut self {
-            Self::Operation(Add(lhs, rhs))
-            | Self::Operation(And(lhs, rhs))
-            | Self::Operation(Divide(lhs, rhs))
-            | Self::Operation(Equal(lhs, rhs))
-            | Self::Operation(Exponentiate(lhs, rhs))
-            | Self::Operation(GreaterThan(lhs, rhs))
-            | Self::Operation(GreaterThanOrEqual(lhs, rhs))
-            | Self::Operation(LessThan(lhs, rhs))
-            | Self::Operation(LessThanOrEqual(lhs, rhs))
-            | Self::Operation(Like(lhs, rhs))
-            | Self::Operation(Modulo(lhs, rhs))
-            | Self::Operation(Multiply(lhs, rhs))
-            | Self::Operation(NotEqual(lhs, rhs))
-            | Self::Operation(Or(lhs, rhs))
-            | Self::Operation(Subtract(lhs, rhs)) => {
-                Self::replace_with(lhs, |e| e.transform(before, after))?;
-                Self::replace_with(rhs, |e| e.transform(before, after))?;
-            }
 
-            Self::Operation(Assert(expr))
-            | Self::Operation(Factorial(expr))
-            | Self::Operation(IsNull(expr))
-            | Self::Operation(Negate(expr))
-            | Self::Operation(Not(expr)) => {
-                Self::replace_with(expr, |e| e.transform(before, after))?
-            }
-
-            Self::Function(_, exprs) => {
-                for expr in exprs {
-                    Self::replace_with(expr, |e| e.transform(before, after))?;
-                }
-            }
-
-            Self::Literal(_) | Self::Field(_, _) | Self::Column(_) => {}
+        // Helper for transforming a boxed expression.
+        let mut transform = |mut expr: Box<Expression>| -> Result<Box<Expression>> {
+            *expr = expr.transform(before, after)?;
+            Ok(expr)
         };
-        after(self)
+
+        self = match self {
+            Self::Literal(_) | Self::Field(_, _) | Self::Column(_) => self,
+
+            Self::Function(name, exprs) => Self::Function(
+                name,
+                exprs.into_iter().map(|e| e.transform(before, after)).collect::<Result<_>>()?,
+            ),
+
+            Self::Operator(op) => Self::Operator(match op {
+                Add(lhs, rhs) => Add(transform(lhs)?, transform(rhs)?),
+                And(lhs, rhs) => And(transform(lhs)?, transform(rhs)?),
+                Divide(lhs, rhs) => Divide(transform(lhs)?, transform(rhs)?),
+                Equal(lhs, rhs) => Equal(transform(lhs)?, transform(rhs)?),
+                Exponentiate(lhs, rhs) => Exponentiate(transform(lhs)?, transform(rhs)?),
+                Factorial(expr) => Factorial(transform(expr)?),
+                GreaterThan(lhs, rhs) => GreaterThan(transform(lhs)?, transform(rhs)?),
+                GreaterThanOrEqual(lhs, rhs) => {
+                    GreaterThanOrEqual(transform(lhs)?, transform(rhs)?)
+                }
+                Identity(expr) => Identity(transform(expr)?),
+                IsNull(expr) => IsNull(transform(expr)?),
+                LessThan(lhs, rhs) => LessThan(transform(lhs)?, transform(rhs)?),
+                LessThanOrEqual(lhs, rhs) => LessThanOrEqual(transform(lhs)?, transform(rhs)?),
+                Like(lhs, rhs) => Like(transform(lhs)?, transform(rhs)?),
+                Modulo(lhs, rhs) => Modulo(transform(lhs)?, transform(rhs)?),
+                Multiply(lhs, rhs) => Multiply(transform(lhs)?, transform(rhs)?),
+                Negate(expr) => Negate(transform(expr)?),
+                Not(expr) => Not(transform(expr)?),
+                NotEqual(lhs, rhs) => NotEqual(transform(lhs)?, transform(rhs)?),
+                Or(lhs, rhs) => Or(transform(lhs)?, transform(rhs)?),
+                Subtract(lhs, rhs) => Subtract(transform(lhs)?, transform(rhs)?),
+            }),
+        };
+        self = after(self)?;
+        Ok(self)
     }
 
     /// Transforms an expression using a mutable reference.
+    /// TODO: try to get rid of this and replace_with().
     pub fn transform_mut<B, A>(&mut self, before: &mut B, after: &mut A) -> Result<()>
     where
         B: FnMut(Self) -> Result<Self>,
@@ -229,43 +220,73 @@ impl Expression {
         self.replace_with(|e| e.transform(before, after))
     }
 
-    /// Walks the expression tree, calling a closure for every node. Halts if closure returns false.
-    pub fn walk<F: Fn(&Expression) -> bool>(&self, visitor: &F) -> bool {
-        use Operation::*;
-        visitor(self)
-            && match self {
-                Self::Operation(Add(lhs, rhs))
-                | Self::Operation(And(lhs, rhs))
-                | Self::Operation(Divide(lhs, rhs))
-                | Self::Operation(Equal(lhs, rhs))
-                | Self::Operation(Exponentiate(lhs, rhs))
-                | Self::Operation(GreaterThan(lhs, rhs))
-                | Self::Operation(GreaterThanOrEqual(lhs, rhs))
-                | Self::Operation(LessThan(lhs, rhs))
-                | Self::Operation(LessThanOrEqual(lhs, rhs))
-                | Self::Operation(Like(lhs, rhs))
-                | Self::Operation(Modulo(lhs, rhs))
-                | Self::Operation(Multiply(lhs, rhs))
-                | Self::Operation(NotEqual(lhs, rhs))
-                | Self::Operation(Or(lhs, rhs))
-                | Self::Operation(Subtract(lhs, rhs)) => lhs.walk(visitor) && rhs.walk(visitor),
+    /// Replaces the expression with result of the closure. Helper function for
+    /// transform().
+    fn replace_with(&mut self, mut f: impl FnMut(Self) -> Result<Self>) -> Result<()> {
+        // Temporarily replace expression with a null value, in case closure panics. May consider
+        // replace_with crate if this hampers performance.
+        let expr = std::mem::replace(self, Expression::Literal(Literal::Null));
+        *self = f(expr)?;
+        Ok(())
+    }
 
-                Self::Operation(Assert(expr))
-                | Self::Operation(Factorial(expr))
-                | Self::Operation(IsNull(expr))
-                | Self::Operation(Negate(expr))
-                | Self::Operation(Not(expr)) => expr.walk(visitor),
+    /// Walks the expression tree depth-first, calling a closure for every node.
+    /// Halts and returns false if the closure returns false.
+    pub fn walk(&self, visitor: &impl Fn(&Expression) -> bool) -> bool {
+        use Operator::*;
+        if !visitor(self) {
+            return false;
+        }
+        match self {
+            Self::Operator(Add(lhs, rhs))
+            | Self::Operator(And(lhs, rhs))
+            | Self::Operator(Divide(lhs, rhs))
+            | Self::Operator(Equal(lhs, rhs))
+            | Self::Operator(Exponentiate(lhs, rhs))
+            | Self::Operator(GreaterThan(lhs, rhs))
+            | Self::Operator(GreaterThanOrEqual(lhs, rhs))
+            | Self::Operator(LessThan(lhs, rhs))
+            | Self::Operator(LessThanOrEqual(lhs, rhs))
+            | Self::Operator(Like(lhs, rhs))
+            | Self::Operator(Modulo(lhs, rhs))
+            | Self::Operator(Multiply(lhs, rhs))
+            | Self::Operator(NotEqual(lhs, rhs))
+            | Self::Operator(Or(lhs, rhs))
+            | Self::Operator(Subtract(lhs, rhs)) => lhs.walk(visitor) && rhs.walk(visitor),
 
-                Self::Function(_, exprs) => {
-                    for expr in exprs {
-                        if !expr.walk(visitor) {
-                            return false;
-                        }
-                    }
-                    true
-                }
+            Self::Operator(Factorial(expr))
+            | Self::Operator(Identity(expr))
+            | Self::Operator(IsNull(expr))
+            | Self::Operator(Negate(expr))
+            | Self::Operator(Not(expr)) => expr.walk(visitor),
 
-                Self::Literal(_) | Self::Field(_, _) | Self::Column(_) => true,
-            }
+            Self::Function(_, exprs) => exprs.iter().any(|expr| expr.walk(visitor)),
+
+            Self::Literal(_) | Self::Field(_, _) | Self::Column(_) => true,
+        }
+    }
+
+    /// Walks the expression tree depth-first while calling a closure until it
+    /// returns true. This is the inverse of walk().
+    pub fn contains(&self, visitor: &impl Fn(&Expression) -> bool) -> bool {
+        !self.walk(&|expr| !visitor(expr))
+    }
+}
+
+impl core::convert::From<Literal> for Expression {
+    fn from(literal: Literal) -> Self {
+        Self::Literal(literal)
+    }
+}
+
+impl core::convert::From<Operator> for Expression {
+    fn from(op: Operator) -> Self {
+        Self::Operator(op)
+    }
+}
+
+impl core::convert::From<Operator> for Box<Expression> {
+    fn from(value: Operator) -> Self {
+        Box::new(value.into())
     }
 }

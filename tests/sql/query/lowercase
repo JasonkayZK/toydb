@@ -2,7 +2,7 @@ Query: select 1
 
 Explain:
 Projection: 1
-└─ Nothing
+└─ EmptyRow
 
 Result: ["?"]
 [Integer(1)]
@@ -27,35 +27,41 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Projection {
-        source: Nothing,
+Plan: Select {
+    root: Projection {
+        source: EmptyRow,
         expressions: [
-            (
-                Constant(
-                    Integer(
-                        1,
-                    ),
+            Constant(
+                Integer(
+                    1,
                 ),
-                None,
             ),
         ],
+        labels: [
+            None,
+        ],
     },
-)
+    labels: [
+        None,
+    ],
+}
 
-Optimized plan: Plan(
-    Projection {
-        source: Nothing,
+Optimized plan: Select {
+    root: Projection {
+        source: EmptyRow,
         expressions: [
-            (
-                Constant(
-                    Integer(
-                        1,
-                    ),
+            Constant(
+                Integer(
+                    1,
                 ),
-                None,
             ),
         ],
+        labels: [
+            None,
+        ],
     },
-)
+    labels: [
+        None,
+    ],
+}
 

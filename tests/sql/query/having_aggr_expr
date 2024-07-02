@@ -5,7 +5,7 @@ Projection: #0, #1
 └─ Order: movies.studio_id asc
    └─ Filter: #2 - #3 < 1
       └─ Projection: movies.studio_id, #0, #1, #2
-         └─ Aggregation: maximum, maximum, minimum
+         └─ Aggregation: max, max, min
             └─ Projection: rating, rating, rating, studio_id
                └─ Scan: movies
 
@@ -50,9 +50,9 @@ AST: Select {
         ),
     ],
     having: Some(
-        Operation(
+        Operator(
             LessThan(
-                Operation(
+                Operator(
                     Subtract(
                         Function(
                             "max",
@@ -95,67 +95,125 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Projection {
+Plan: Select {
+    root: Projection {
         source: Order {
             source: Filter {
                 source: Projection {
                     source: Aggregation {
                         source: Projection {
                             source: Scan {
-                                table: "movies",
-                                alias: None,
+                                table: Table {
+                                    name: "movies",
+                                    primary_key: 0,
+                                    columns: [
+                                        Column {
+                                            name: "id",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: true,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "title",
+                                            datatype: String,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "studio_id",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: true,
+                                            references: Some(
+                                                "studios",
+                                            ),
+                                        },
+                                        Column {
+                                            name: "genre_id",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: true,
+                                            references: Some(
+                                                "genres",
+                                            ),
+                                        },
+                                        Column {
+                                            name: "released",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "rating",
+                                            datatype: Float,
+                                            nullable: true,
+                                            default: Some(
+                                                Null,
+                                            ),
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "ultrahd",
+                                            datatype: Boolean,
+                                            nullable: true,
+                                            default: Some(
+                                                Null,
+                                            ),
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                    ],
+                                },
                                 filter: None,
+                                alias: None,
                             },
                             expressions: [
-                                (
-                                    Field(
-                                        5,
-                                        Some(
-                                            (
-                                                None,
-                                                "rating",
-                                            ),
-                                        ),
+                                Field(
+                                    5,
+                                    Unqualified(
+                                        "rating",
                                     ),
-                                    None,
                                 ),
-                                (
-                                    Field(
-                                        5,
-                                        Some(
-                                            (
-                                                None,
-                                                "rating",
-                                            ),
-                                        ),
+                                Field(
+                                    5,
+                                    Unqualified(
+                                        "rating",
                                     ),
-                                    None,
                                 ),
-                                (
-                                    Field(
-                                        5,
-                                        Some(
-                                            (
-                                                None,
-                                                "rating",
-                                            ),
-                                        ),
+                                Field(
+                                    5,
+                                    Unqualified(
+                                        "rating",
                                     ),
-                                    None,
                                 ),
-                                (
-                                    Field(
-                                        2,
-                                        Some(
-                                            (
-                                                None,
-                                                "studio_id",
-                                            ),
-                                        ),
+                                Field(
+                                    2,
+                                    Unqualified(
+                                        "studio_id",
                                     ),
-                                    None,
                                 ),
+                            ],
+                            labels: [
+                                None,
+                                None,
+                                None,
+                                None,
                             ],
                         },
                         aggregates: [
@@ -163,43 +221,34 @@ Plan: Plan(
                             Max,
                             Min,
                         ],
+                        group_by: 1,
                     },
                     expressions: [
-                        (
-                            Field(
-                                3,
-                                Some(
-                                    (
-                                        Some(
-                                            "movies",
-                                        ),
-                                        "studio_id",
-                                    ),
-                                ),
+                        Field(
+                            3,
+                            Qualified(
+                                "movies",
+                                "studio_id",
                             ),
+                        ),
+                        Field(
+                            0,
                             None,
                         ),
-                        (
-                            Field(
-                                0,
-                                None,
-                            ),
+                        Field(
+                            1,
                             None,
                         ),
-                        (
-                            Field(
-                                1,
-                                None,
-                            ),
+                        Field(
+                            2,
                             None,
                         ),
-                        (
-                            Field(
-                                2,
-                                None,
-                            ),
-                            None,
-                        ),
+                    ],
+                    labels: [
+                        None,
+                        None,
+                        None,
+                        None,
                     ],
                 },
                 predicate: LessThan(
@@ -224,13 +273,9 @@ Plan: Plan(
                 (
                     Field(
                         0,
-                        Some(
-                            (
-                                Some(
-                                    "movies",
-                                ),
-                                "studio_id",
-                            ),
+                        Qualified(
+                            "movies",
+                            "studio_id",
                         ),
                     ),
                     Ascending,
@@ -238,85 +283,148 @@ Plan: Plan(
             ],
         },
         expressions: [
-            (
-                Field(
-                    0,
-                    None,
-                ),
+            Field(
+                0,
                 None,
             ),
-            (
-                Field(
-                    1,
-                    None,
-                ),
+            Field(
+                1,
                 None,
             ),
         ],
+        labels: [
+            None,
+            None,
+        ],
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "studio_id",
+        ),
+        None,
+    ],
+}
 
-Optimized plan: Plan(
-    Projection {
+Optimized plan: Select {
+    root: Projection {
         source: Order {
             source: Filter {
                 source: Projection {
                     source: Aggregation {
                         source: Projection {
                             source: Scan {
-                                table: "movies",
-                                alias: None,
+                                table: Table {
+                                    name: "movies",
+                                    primary_key: 0,
+                                    columns: [
+                                        Column {
+                                            name: "id",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: true,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "title",
+                                            datatype: String,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "studio_id",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: true,
+                                            references: Some(
+                                                "studios",
+                                            ),
+                                        },
+                                        Column {
+                                            name: "genre_id",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: true,
+                                            references: Some(
+                                                "genres",
+                                            ),
+                                        },
+                                        Column {
+                                            name: "released",
+                                            datatype: Integer,
+                                            nullable: false,
+                                            default: None,
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "rating",
+                                            datatype: Float,
+                                            nullable: true,
+                                            default: Some(
+                                                Null,
+                                            ),
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                        Column {
+                                            name: "ultrahd",
+                                            datatype: Boolean,
+                                            nullable: true,
+                                            default: Some(
+                                                Null,
+                                            ),
+                                            unique: false,
+                                            index: false,
+                                            references: None,
+                                        },
+                                    ],
+                                },
                                 filter: None,
+                                alias: None,
                             },
                             expressions: [
-                                (
-                                    Field(
-                                        5,
-                                        Some(
-                                            (
-                                                None,
-                                                "rating",
-                                            ),
-                                        ),
+                                Field(
+                                    5,
+                                    Unqualified(
+                                        "rating",
                                     ),
-                                    None,
                                 ),
-                                (
-                                    Field(
-                                        5,
-                                        Some(
-                                            (
-                                                None,
-                                                "rating",
-                                            ),
-                                        ),
+                                Field(
+                                    5,
+                                    Unqualified(
+                                        "rating",
                                     ),
-                                    None,
                                 ),
-                                (
-                                    Field(
-                                        5,
-                                        Some(
-                                            (
-                                                None,
-                                                "rating",
-                                            ),
-                                        ),
+                                Field(
+                                    5,
+                                    Unqualified(
+                                        "rating",
                                     ),
-                                    None,
                                 ),
-                                (
-                                    Field(
-                                        2,
-                                        Some(
-                                            (
-                                                None,
-                                                "studio_id",
-                                            ),
-                                        ),
+                                Field(
+                                    2,
+                                    Unqualified(
+                                        "studio_id",
                                     ),
-                                    None,
                                 ),
+                            ],
+                            labels: [
+                                None,
+                                None,
+                                None,
+                                None,
                             ],
                         },
                         aggregates: [
@@ -324,43 +432,34 @@ Optimized plan: Plan(
                             Max,
                             Min,
                         ],
+                        group_by: 1,
                     },
                     expressions: [
-                        (
-                            Field(
-                                3,
-                                Some(
-                                    (
-                                        Some(
-                                            "movies",
-                                        ),
-                                        "studio_id",
-                                    ),
-                                ),
+                        Field(
+                            3,
+                            Qualified(
+                                "movies",
+                                "studio_id",
                             ),
+                        ),
+                        Field(
+                            0,
                             None,
                         ),
-                        (
-                            Field(
-                                0,
-                                None,
-                            ),
+                        Field(
+                            1,
                             None,
                         ),
-                        (
-                            Field(
-                                1,
-                                None,
-                            ),
+                        Field(
+                            2,
                             None,
                         ),
-                        (
-                            Field(
-                                2,
-                                None,
-                            ),
-                            None,
-                        ),
+                    ],
+                    labels: [
+                        None,
+                        None,
+                        None,
+                        None,
                     ],
                 },
                 predicate: LessThan(
@@ -385,13 +484,9 @@ Optimized plan: Plan(
                 (
                     Field(
                         0,
-                        Some(
-                            (
-                                Some(
-                                    "movies",
-                                ),
-                                "studio_id",
-                            ),
+                        Qualified(
+                            "movies",
+                            "studio_id",
                         ),
                     ),
                     Ascending,
@@ -399,21 +494,26 @@ Optimized plan: Plan(
             ],
         },
         expressions: [
-            (
-                Field(
-                    0,
-                    None,
-                ),
+            Field(
+                0,
                 None,
             ),
-            (
-                Field(
-                    1,
-                    None,
-                ),
+            Field(
+                1,
                 None,
             ),
         ],
+        labels: [
+            None,
+            None,
+        ],
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "studio_id",
+        ),
+        None,
+    ],
+}
 

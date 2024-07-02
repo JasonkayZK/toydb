@@ -4,17 +4,19 @@ mod query;
 mod schema;
 
 use toydb::error::Result;
-use toydb::sql::engine::{Engine, KV};
-use toydb::storage::kv;
+use toydb::sql::engine::{Engine, Local};
+use toydb::storage;
 
 /// Sets up a basic in-memory SQL engine with an initial dataset.
-fn setup(queries: Vec<&str>) -> Result<KV> {
-    let engine = KV::new(kv::MVCC::new(Box::new(kv::Memory::new())));
-    let mut session = engine.session()?;
-    session.execute("BEGIN")?;
-    for query in queries {
-        session.execute(query)?;
+fn setup(queries: Vec<&str>) -> Result<Local<storage::Memory>> {
+    let engine = Local::new(storage::Memory::new());
+    {
+        let mut session = engine.session();
+        session.execute("BEGIN")?;
+        for query in queries {
+            session.execute(query)?;
+        }
+        session.execute("COMMIT")?;
     }
-    session.execute("COMMIT")?;
     Ok(engine)
 }

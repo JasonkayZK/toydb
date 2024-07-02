@@ -5,69 +5,61 @@
 
 #![warn(clippy::all)]
 
-use clap::{app_from_crate, crate_authors, crate_description, crate_name, crate_version};
+use itertools::Itertools as _;
+use rustyline::history::DefaultHistory;
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{error::ReadlineError, Editor, Modifiers};
 use rustyline_derive::{Completer, Helper, Highlighter, Hinter};
+use toydb::errinput;
 use toydb::error::{Error, Result};
-use toydb::sql::engine::Mode;
-use toydb::sql::execution::ResultSet;
+use toydb::sql::engine::StatementResult;
 use toydb::sql::parser::{Lexer, Token};
 use toydb::Client;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let opts = app_from_crate!()
-        .arg(clap::Arg::with_name("command"))
-        .arg(clap::Arg::with_name("headers").short("H").long("headers").help("Show column headers"))
-        .arg(
-            clap::Arg::with_name("host")
-                .short("h")
+fn main() -> Result<()> {
+    let opts = clap::command!()
+        .name("toysql")
+        .about("A ToyDB client.")
+        .args([
+            clap::Arg::new("command"),
+            clap::Arg::new("host")
+                .short('H')
                 .long("host")
                 .help("Host to connect to")
-                .takes_value(true)
-                .required(true)
-                .default_value("127.0.0.1"),
-        )
-        .arg(
-            clap::Arg::with_name("port")
-                .short("p")
+                .default_value("localhost"),
+            clap::Arg::new("port")
+                .short('p')
                 .long("port")
                 .help("Port number to connect to")
-                .takes_value(true)
-                .required(true)
+                .value_parser(clap::value_parser!(u16))
                 .default_value("9605"),
-        )
+        ])
         .get_matches();
 
     let mut toysql =
-        ToySQL::new(opts.value_of("host").unwrap(), opts.value_of("port").unwrap().parse()?)
-            .await?;
-    if opts.is_present("headers") {
-        toysql.show_headers = true
-    }
+        ToySQL::new(opts.get_one::<String>("host").unwrap(), *opts.get_one("port").unwrap())?;
 
-    if let Some(command) = opts.value_of("command") {
-        toysql.execute(command).await
+    if let Some(command) = opts.get_one::<&str>("command") {
+        toysql.execute(command)
     } else {
-        toysql.run().await
+        toysql.run()
     }
 }
 
 /// The ToySQL REPL
 struct ToySQL {
     client: Client,
-    editor: Editor<InputValidator>,
+    editor: Editor<InputValidator, DefaultHistory>,
     history_path: Option<std::path::PathBuf>,
     show_headers: bool,
 }
 
 impl ToySQL {
     /// Creates a new ToySQL REPL for the given server host and port
-    async fn new(host: &str, port: u16) -> Result<Self> {
+    fn new(host: &str, port: u16) -> Result<Self> {
         Ok(Self {
-            client: Client::new((host, port)).await?,
-            editor: Editor::new(),
+            client: Client::new((host, port))?,
+            editor: Editor::new()?,
             history_path: std::env::var_os("HOME")
                 .map(|home| std::path::Path::new(&home).join(".toysql.history")),
             show_headers: false,
@@ -75,25 +67,25 @@ impl ToySQL {
     }
 
     /// Executes a line of input
-    async fn execute(&mut self, input: &str) -> Result<()> {
+    fn execute(&mut self, input: &str) -> Result<()> {
         if input.starts_with('!') {
-            self.execute_command(input).await
+            self.execute_command(input)
         } else if !input.is_empty() {
-            self.execute_query(input).await
+            self.execute_query(input)
         } else {
             Ok(())
         }
     }
 
     /// Handles a REPL command (prefixed by !, e.g. !help)
-    async fn execute_command(&mut self, input: &str) -> Result<()> {
+    fn execute_command(&mut self, input: &str) -> Result<()> {
         let mut input = input.split_ascii_whitespace();
-        let command = input.next().ok_or_else(|| Error::Parse("Expected command.".to_string()))?;
+        let command = input.next().ok_or::<Error>(errinput!("expected command"))?;
 
         let getargs = |n| {
             let args: Vec<&str> = input.collect();
             if args.len() != n {
-                Err(Error::Parse(format!("{}: expected {} args, got {}", command, n, args.len())))
+                errinput!("{command}: expected {n} args, got {}", args.len())
             } else {
                 Ok(args)
             }
@@ -109,7 +101,7 @@ impl ToySQL {
                     self.show_headers = false;
                     println!("Headers disabled");
                 }
-                v => return Err(Error::Parse(format!("Invalid value {}, expected on or off", v))),
+                v => return errinput!("invalid value {v}, expected on or off"),
             },
             "!help" => println!(
                 r#"
@@ -124,10 +116,10 @@ The following commands are also available:
 "#
             ),
             "!status" => {
-                let status = self.client.status().await?;
+                let status = self.client.status()?;
                 let mut node_logs = status
                     .raft
-                    .node_last_index
+                    .match_index
                     .iter()
                     .map(|(id, index)| format!("{}:{}", id, index))
                     .collect::<Vec<_>>();
@@ -137,72 +129,80 @@ The following commands are also available:
 Server:    {server} (leader {leader} in term {term} with {nodes} nodes)
 Raft log:  {committed} committed, {applied} applied, {raft_size} MB ({raft_storage} storage)
 Node logs: {logs}
-SQL txns:  {txns_active} active, {txns} total ({sql_storage} storage)
+MVCC:      {active_txns} active txns, {versions} versions
+Storage:   {keys} keys, {logical_size} MB logical, {nodes}x {disk_size} MB disk, {garbage_percent}% garbage ({sql_storage} engine)
 "#,
-                    server = status.raft.server,
+                    server = status.server,
                     leader = status.raft.leader,
                     term = status.raft.term,
-                    nodes = status.raft.node_last_index.len(),
+                    nodes = status.raft.match_index.len(),
                     committed = status.raft.commit_index,
-                    applied = status.raft.apply_index,
-                    raft_storage = status.raft.storage,
-                    raft_size = format!("{:.3}", status.raft.storage_size as f64 / 1000.0 / 1000.0),
+                    applied = status.raft.applied_index,
+                    raft_storage = status.raft.storage.name,
+                    raft_size =
+                        format_args!("{:.3}", status.raft.storage.size as f64 / 1000.0 / 1000.0),
                     logs = node_logs.join(" "),
-                    txns = status.mvcc.txns,
-                    txns_active = status.mvcc.txns_active,
-                    sql_storage = status.mvcc.storage
+                    versions = status.mvcc.versions,
+                    active_txns = status.mvcc.active_txns,
+                    keys = status.mvcc.storage.keys,
+                    logical_size =
+                        format_args!("{:.3}", status.mvcc.storage.size as f64 / 1000.0 / 1000.0),
+                    garbage_percent = format_args!(
+                        "{:.0}",
+                        if status.mvcc.storage.total_disk_size > 0 {
+                            status.mvcc.storage.garbage_disk_size as f64
+                                / status.mvcc.storage.total_disk_size as f64
+                                * 100.0
+                        } else {
+                            0.0
+                        }
+                    ),
+                    disk_size = format_args!(
+                        "{:.3}",
+                        status.mvcc.storage.total_disk_size as f64 / 1000.0 / 1000.0
+                    ),
+                    sql_storage = status.mvcc.storage.name,
                 )
             }
             "!table" => {
                 let args = getargs(1)?;
-                println!("{}", self.client.get_table(args[0]).await?);
+                println!("{}", self.client.get_table(args[0])?);
             }
             "!tables" => {
                 getargs(0)?;
-                for table in self.client.list_tables().await? {
+                for table in self.client.list_tables()? {
                     println!("{}", table)
                 }
             }
-            c => return Err(Error::Parse(format!("Unknown command {}", c))),
+            c => return errinput!("unknown command {c}"),
         }
         Ok(())
     }
 
     /// Runs a query and displays the results
-    async fn execute_query(&mut self, query: &str) -> Result<()> {
-        match self.client.execute(query).await? {
-            ResultSet::Begin { id, mode } => match mode {
-                Mode::ReadWrite => println!("Began transaction {}", id),
-                Mode::ReadOnly => println!("Began read-only transaction {}", id),
-                Mode::Snapshot { version, .. } => println!(
-                    "Began read-only transaction {} in snapshot at version {}",
-                    id, version
-                ),
+    fn execute_query(&mut self, query: &str) -> Result<()> {
+        match self.client.execute(query)? {
+            StatementResult::Begin { version, read_only } => match read_only {
+                false => println!("Began transaction at new version {}", version),
+                true => println!("Began read-only transaction at version {}", version),
             },
-            ResultSet::Commit { id } => println!("Committed transaction {}", id),
-            ResultSet::Rollback { id } => println!("Rolled back transaction {}", id),
-            ResultSet::Create { count } => println!("Created {} rows", count),
-            ResultSet::Delete { count } => println!("Deleted {} rows", count),
-            ResultSet::Update { count } => println!("Updated {} rows", count),
-            ResultSet::CreateTable { name } => println!("Created table {}", name),
-            ResultSet::DropTable { name } => println!("Dropped table {}", name),
-            ResultSet::Explain(plan) => println!("{}", plan.to_string()),
-            ResultSet::Query { columns, mut rows } => {
+            StatementResult::Commit { version: id } => println!("Committed transaction {}", id),
+            StatementResult::Rollback { version: id } => println!("Rolled back transaction {}", id),
+            StatementResult::Insert { count } => println!("Created {} rows", count),
+            StatementResult::Delete { count } => println!("Deleted {} rows", count),
+            StatementResult::Update { count } => println!("Updated {} rows", count),
+            StatementResult::CreateTable { name } => println!("Created table {}", name),
+            StatementResult::DropTable { name, existed } => match existed {
+                true => println!("Dropped table {}", name),
+                false => println!("Table {} did not exit", name),
+            },
+            StatementResult::Explain(plan) => println!("{}", plan),
+            StatementResult::Select { columns, rows } => {
                 if self.show_headers {
-                    println!(
-                        "{}",
-                        columns
-                            .iter()
-                            .map(|c| c.name.as_deref().unwrap_or("?"))
-                            .collect::<Vec<_>>()
-                            .join("|")
-                    );
+                    println!("{}", columns.into_iter().map(|c| c.as_header()).join("|"));
                 }
-                while let Some(row) = rows.next().transpose()? {
-                    println!(
-                        "{}",
-                        row.into_iter().map(|v| format!("{}", v)).collect::<Vec<_>>().join("|")
-                    );
+                for row in rows {
+                    println!("{}", row.into_iter().map(|v| v.to_string()).join("|"));
                 }
             }
         }
@@ -212,14 +212,13 @@ SQL txns:  {txns_active} active, {txns} total ({sql_storage} storage)
     /// Prompts the user for input
     fn prompt(&mut self) -> Result<Option<String>> {
         let prompt = match self.client.txn() {
-            Some((id, Mode::ReadWrite)) => format!("toydb:{}> ", id),
-            Some((id, Mode::ReadOnly)) => format!("toydb:{}> ", id),
-            Some((_, Mode::Snapshot { version })) => format!("toydb@{}> ", version),
+            Some((version, false)) => format!("toydb:{}> ", version),
+            Some((version, true)) => format!("toydb@{}> ", version),
             None => "toydb> ".into(),
         };
         match self.editor.readline(&prompt) {
             Ok(input) => {
-                self.editor.add_history_entry(&input);
+                self.editor.add_history_entry(&input)?;
                 Ok(Some(input.trim().to_string()))
             }
             Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => Ok(None),
@@ -228,7 +227,7 @@ SQL txns:  {txns_active} active, {txns} total ({sql_storage} storage)
     }
 
     /// Runs the ToySQL REPL
-    async fn run(&mut self) -> Result<()> {
+    fn run(&mut self) -> Result<()> {
         if let Some(path) = &self.history_path {
             match self.editor.load_history(path) {
                 Ok(_) => {}
@@ -243,18 +242,13 @@ SQL txns:  {txns_active} active, {txns} total ({sql_storage} storage)
             rustyline::Cmd::Noop,
         );
 
-        let status = self.client.status().await?;
-        println!(
-            "Connected to toyDB node \"{}\". Enter !help for instructions.",
-            status.raft.server
-        );
+        let status = self.client.status()?;
+        println!("Connected to toyDB node \"{}\". Enter !help for instructions.", status.server);
 
         while let Some(input) = self.prompt()? {
-            match self.execute(&input).await {
-                Ok(()) => {}
-                error @ Err(Error::Internal(_)) => return error,
-                Err(error) => println!("Error: {}", error.to_string()),
-            }
+            if let Err(error) = self.execute(&input) {
+                println!("Error: {error}");
+            };
         }
 
         if let Some(path) = &self.history_path {

@@ -41,7 +41,7 @@ AST: Select {
             None,
         ),
         (
-            Operation(
+            Operator(
                 Modulo(
                     Field(
                         None,
@@ -70,7 +70,7 @@ AST: Select {
     having: None,
     order: [
         (
-            Operation(
+            Operator(
                 Modulo(
                     Field(
                         None,
@@ -90,71 +90,129 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Order {
+Plan: Select {
+    root: Order {
         source: Projection {
             source: Scan {
-                table: "movies",
-                alias: None,
+                table: Table {
+                    name: "movies",
+                    primary_key: 0,
+                    columns: [
+                        Column {
+                            name: "id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: true,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "title",
+                            datatype: String,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "studio_id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "studios",
+                            ),
+                        },
+                        Column {
+                            name: "genre_id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "genres",
+                            ),
+                        },
+                        Column {
+                            name: "released",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "rating",
+                            datatype: Float,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "ultrahd",
+                            datatype: Boolean,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                    ],
+                },
                 filter: None,
+                alias: None,
             },
             expressions: [
-                (
-                    Field(
-                        0,
-                        Some(
-                            (
-                                None,
-                                "id",
-                            ),
-                        ),
+                Field(
+                    0,
+                    Unqualified(
+                        "id",
                     ),
-                    None,
                 ),
-                (
-                    Field(
-                        1,
-                        Some(
-                            (
-                                None,
-                                "title",
-                            ),
-                        ),
+                Field(
+                    1,
+                    Unqualified(
+                        "title",
                     ),
-                    None,
                 ),
-                (
+                Field(
+                    4,
+                    Unqualified(
+                        "released",
+                    ),
+                ),
+                Modulo(
                     Field(
                         4,
-                        Some(
-                            (
-                                None,
-                                "released",
-                            ),
+                        Unqualified(
+                            "released",
                         ),
                     ),
-                    None,
-                ),
-                (
-                    Modulo(
-                        Field(
+                    Constant(
+                        Integer(
                             4,
-                            Some(
-                                (
-                                    None,
-                                    "released",
-                                ),
-                            ),
-                        ),
-                        Constant(
-                            Integer(
-                                4,
-                            ),
                         ),
                     ),
-                    Some(
-                        "ord",
-                    ),
+                ),
+            ],
+            labels: [
+                None,
+                None,
+                None,
+                Unqualified(
+                    "ord",
                 ),
             ],
         },
@@ -162,84 +220,156 @@ Plan: Plan(
             (
                 Field(
                     3,
-                    Some(
-                        (
-                            None,
-                            "ord",
-                        ),
+                    Unqualified(
+                        "ord",
                     ),
                 ),
                 Ascending,
             ),
         ],
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "id",
+        ),
+        Qualified(
+            "movies",
+            "title",
+        ),
+        Qualified(
+            "movies",
+            "released",
+        ),
+        Unqualified(
+            "ord",
+        ),
+    ],
+}
 
-Optimized plan: Plan(
-    Order {
+Optimized plan: Select {
+    root: Order {
         source: Projection {
             source: Scan {
-                table: "movies",
-                alias: None,
+                table: Table {
+                    name: "movies",
+                    primary_key: 0,
+                    columns: [
+                        Column {
+                            name: "id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: true,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "title",
+                            datatype: String,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "studio_id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "studios",
+                            ),
+                        },
+                        Column {
+                            name: "genre_id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "genres",
+                            ),
+                        },
+                        Column {
+                            name: "released",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "rating",
+                            datatype: Float,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "ultrahd",
+                            datatype: Boolean,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                    ],
+                },
                 filter: None,
+                alias: None,
             },
             expressions: [
-                (
-                    Field(
-                        0,
-                        Some(
-                            (
-                                None,
-                                "id",
-                            ),
-                        ),
+                Field(
+                    0,
+                    Unqualified(
+                        "id",
                     ),
-                    None,
                 ),
-                (
-                    Field(
-                        1,
-                        Some(
-                            (
-                                None,
-                                "title",
-                            ),
-                        ),
+                Field(
+                    1,
+                    Unqualified(
+                        "title",
                     ),
-                    None,
                 ),
-                (
+                Field(
+                    4,
+                    Unqualified(
+                        "released",
+                    ),
+                ),
+                Modulo(
                     Field(
                         4,
-                        Some(
-                            (
-                                None,
-                                "released",
-                            ),
+                        Unqualified(
+                            "released",
                         ),
                     ),
-                    None,
-                ),
-                (
-                    Modulo(
-                        Field(
+                    Constant(
+                        Integer(
                             4,
-                            Some(
-                                (
-                                    None,
-                                    "released",
-                                ),
-                            ),
-                        ),
-                        Constant(
-                            Integer(
-                                4,
-                            ),
                         ),
                     ),
-                    Some(
-                        "ord",
-                    ),
+                ),
+            ],
+            labels: [
+                None,
+                None,
+                None,
+                Unqualified(
+                    "ord",
                 ),
             ],
         },
@@ -247,16 +377,30 @@ Optimized plan: Plan(
             (
                 Field(
                     3,
-                    Some(
-                        (
-                            None,
-                            "ord",
-                        ),
+                    Unqualified(
+                        "ord",
                     ),
                 ),
                 Ascending,
             ),
         ],
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "id",
+        ),
+        Qualified(
+            "movies",
+            "title",
+        ),
+        Qualified(
+            "movies",
+            "released",
+        ),
+        Unqualified(
+            "ord",
+        ),
+    ],
+}
 

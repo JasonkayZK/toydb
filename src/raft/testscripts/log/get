@@ -1,0 +1,27 @@
+# get returns None on an empty engine.
+get 1
+---
+None
+
+# Append a few entries.
+set_term 1
+append
+append foo
+set_term 2
+append bar
+---
+append → 1@1 None
+append → 2@1 foo
+append → 3@2 bar
+
+# get returns noop entries and regular entries.
+get 1 2
+---
+1@1 None
+2@1 foo
+
+# get returns None for missing entries, and for index 0.
+get 4 0
+---
+None
+None

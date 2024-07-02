@@ -1,6 +1,6 @@
 Query: SELECT m.id AS movie_id, g.id AS genre_id FROM movies m, genres g WHERE movie_id >= 3 AND genre_id = 1
 
-Error: Unknown field movie_id
+Error: invalid input: unknown field movie_id
 
 AST: Select {
     select: [
@@ -42,9 +42,9 @@ AST: Select {
         },
     ],
     where: Some(
-        Operation(
+        Operator(
             And(
-                Operation(
+                Operator(
                     GreaterThanOrEqual(
                         Field(
                             None,
@@ -57,7 +57,7 @@ AST: Select {
                         ),
                     ),
                 ),
-                Operation(
+                Operator(
                     Equal(
                         Field(
                             None,
@@ -80,4 +80,4 @@ AST: Select {
     limit: None,
 }
 
-Plan: Value("Unknown field movie_id")
+Plan: InvalidInput("unknown field movie_id")

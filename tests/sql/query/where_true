@@ -1,7 +1,7 @@
 Query: SELECT * FROM movies WHERE TRUE
 
 Explain:
-Scan: movies (TRUE)
+Scan: movies
 
 Result: ["id", "title", "studio_id", "genre_id", "released", "rating", "ultrahd"]
 [Integer(1), String("Stalker"), Integer(1), Integer(1), Integer(1979), Float(8.2), Null]
@@ -37,12 +37,88 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Filter {
+Plan: Select {
+    root: Filter {
         source: Scan {
-            table: "movies",
-            alias: None,
+            table: Table {
+                name: "movies",
+                primary_key: 0,
+                columns: [
+                    Column {
+                        name: "id",
+                        datatype: Integer,
+                        nullable: false,
+                        default: None,
+                        unique: true,
+                        index: false,
+                        references: None,
+                    },
+                    Column {
+                        name: "title",
+                        datatype: String,
+                        nullable: false,
+                        default: None,
+                        unique: false,
+                        index: false,
+                        references: None,
+                    },
+                    Column {
+                        name: "studio_id",
+                        datatype: Integer,
+                        nullable: false,
+                        default: None,
+                        unique: false,
+                        index: true,
+                        references: Some(
+                            "studios",
+                        ),
+                    },
+                    Column {
+                        name: "genre_id",
+                        datatype: Integer,
+                        nullable: false,
+                        default: None,
+                        unique: false,
+                        index: true,
+                        references: Some(
+                            "genres",
+                        ),
+                    },
+                    Column {
+                        name: "released",
+                        datatype: Integer,
+                        nullable: false,
+                        default: None,
+                        unique: false,
+                        index: false,
+                        references: None,
+                    },
+                    Column {
+                        name: "rating",
+                        datatype: Float,
+                        nullable: true,
+                        default: Some(
+                            Null,
+                        ),
+                        unique: false,
+                        index: false,
+                        references: None,
+                    },
+                    Column {
+                        name: "ultrahd",
+                        datatype: Boolean,
+                        nullable: true,
+                        default: Some(
+                            Null,
+                        ),
+                        unique: false,
+                        index: false,
+                        references: None,
+                    },
+                ],
+            },
             filter: None,
+            alias: None,
         },
         predicate: Constant(
             Boolean(
@@ -50,19 +126,149 @@ Plan: Plan(
             ),
         ),
     },
-)
-
-Optimized plan: Plan(
-    Scan {
-        table: "movies",
-        alias: None,
-        filter: Some(
-            Constant(
-                Boolean(
-                    true,
-                ),
-            ),
+    labels: [
+        Qualified(
+            "movies",
+            "id",
         ),
+        Qualified(
+            "movies",
+            "title",
+        ),
+        Qualified(
+            "movies",
+            "studio_id",
+        ),
+        Qualified(
+            "movies",
+            "genre_id",
+        ),
+        Qualified(
+            "movies",
+            "released",
+        ),
+        Qualified(
+            "movies",
+            "rating",
+        ),
+        Qualified(
+            "movies",
+            "ultrahd",
+        ),
+    ],
+}
+
+Optimized plan: Select {
+    root: Scan {
+        table: Table {
+            name: "movies",
+            primary_key: 0,
+            columns: [
+                Column {
+                    name: "id",
+                    datatype: Integer,
+                    nullable: false,
+                    default: None,
+                    unique: true,
+                    index: false,
+                    references: None,
+                },
+                Column {
+                    name: "title",
+                    datatype: String,
+                    nullable: false,
+                    default: None,
+                    unique: false,
+                    index: false,
+                    references: None,
+                },
+                Column {
+                    name: "studio_id",
+                    datatype: Integer,
+                    nullable: false,
+                    default: None,
+                    unique: false,
+                    index: true,
+                    references: Some(
+                        "studios",
+                    ),
+                },
+                Column {
+                    name: "genre_id",
+                    datatype: Integer,
+                    nullable: false,
+                    default: None,
+                    unique: false,
+                    index: true,
+                    references: Some(
+                        "genres",
+                    ),
+                },
+                Column {
+                    name: "released",
+                    datatype: Integer,
+                    nullable: false,
+                    default: None,
+                    unique: false,
+                    index: false,
+                    references: None,
+                },
+                Column {
+                    name: "rating",
+                    datatype: Float,
+                    nullable: true,
+                    default: Some(
+                        Null,
+                    ),
+                    unique: false,
+                    index: false,
+                    references: None,
+                },
+                Column {
+                    name: "ultrahd",
+                    datatype: Boolean,
+                    nullable: true,
+                    default: Some(
+                        Null,
+                    ),
+                    unique: false,
+                    index: false,
+                    references: None,
+                },
+            ],
+        },
+        filter: None,
+        alias: None,
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "id",
+        ),
+        Qualified(
+            "movies",
+            "title",
+        ),
+        Qualified(
+            "movies",
+            "studio_id",
+        ),
+        Qualified(
+            "movies",
+            "genre_id",
+        ),
+        Qualified(
+            "movies",
+            "released",
+        ),
+        Qualified(
+            "movies",
+            "rating",
+        ),
+        Qualified(
+            "movies",
+            "ultrahd",
+        ),
+    ],
+}
 

@@ -71,9 +71,9 @@ AST: Select {
                 },
                 type: Inner,
                 predicate: Some(
-                    Operation(
+                    Operator(
                         And(
-                            Operation(
+                            Operator(
                                 Equal(
                                     Field(
                                         Some(
@@ -89,7 +89,7 @@ AST: Select {
                                     ),
                                 ),
                             ),
-                            Operation(
+                            Operator(
                                 Equal(
                                     Field(
                                         Some(
@@ -116,9 +116,9 @@ AST: Select {
             },
             type: Inner,
             predicate: Some(
-                Operation(
+                Operator(
                     And(
-                        Operation(
+                        Operator(
                             Equal(
                                 Field(
                                     Some(
@@ -134,7 +134,7 @@ AST: Select {
                                 ),
                             ),
                         ),
-                        Operation(
+                        Operator(
                             Equal(
                                 Field(
                                     Some(
@@ -172,62 +172,150 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Order {
+Plan: Select {
+    root: Order {
         source: Projection {
             source: NestedLoopJoin {
                 left: NestedLoopJoin {
                     left: Scan {
-                        table: "movies",
+                        table: Table {
+                            name: "movies",
+                            primary_key: 0,
+                            columns: [
+                                Column {
+                                    name: "id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: true,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "title",
+                                    datatype: String,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "studio_id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: true,
+                                    references: Some(
+                                        "studios",
+                                    ),
+                                },
+                                Column {
+                                    name: "genre_id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: true,
+                                    references: Some(
+                                        "genres",
+                                    ),
+                                },
+                                Column {
+                                    name: "released",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "rating",
+                                    datatype: Float,
+                                    nullable: true,
+                                    default: Some(
+                                        Null,
+                                    ),
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "ultrahd",
+                                    datatype: Boolean,
+                                    nullable: true,
+                                    default: Some(
+                                        Null,
+                                    ),
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                            ],
+                        },
+                        filter: None,
                         alias: Some(
                             "m",
                         ),
-                        filter: None,
                     },
                     left_size: 7,
                     right: Scan {
-                        table: "genres",
+                        table: Table {
+                            name: "genres",
+                            primary_key: 0,
+                            columns: [
+                                Column {
+                                    name: "id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: true,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "name",
+                                    datatype: String,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                            ],
+                        },
+                        filter: None,
                         alias: Some(
                             "g",
                         ),
-                        filter: None,
                     },
+                    right_size: 2,
                     predicate: Some(
                         And(
                             Equal(
                                 Field(
                                     3,
-                                    Some(
-                                        (
-                                            Some(
-                                                "m",
-                                            ),
-                                            "genre_id",
-                                        ),
+                                    Qualified(
+                                        "m",
+                                        "genre_id",
                                     ),
                                 ),
                                 Field(
                                     7,
-                                    Some(
-                                        (
-                                            Some(
-                                                "g",
-                                            ),
-                                            "id",
-                                        ),
+                                    Qualified(
+                                        "g",
+                                        "id",
                                     ),
                                 ),
                             ),
                             Equal(
                                 Field(
                                     7,
-                                    Some(
-                                        (
-                                            Some(
-                                                "g",
-                                            ),
-                                            "id",
-                                        ),
+                                    Qualified(
+                                        "g",
+                                        "id",
                                     ),
                                 ),
                                 Constant(
@@ -242,48 +330,73 @@ Plan: Plan(
                 },
                 left_size: 9,
                 right: Scan {
-                    table: "studios",
+                    table: Table {
+                        name: "studios",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "name",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "country_id",
+                                datatype: String,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "countries",
+                                ),
+                            },
+                        ],
+                    },
+                    filter: None,
                     alias: Some(
                         "s",
                     ),
-                    filter: None,
                 },
+                right_size: 3,
                 predicate: Some(
                     And(
                         Equal(
                             Field(
                                 2,
-                                Some(
-                                    (
-                                        Some(
-                                            "m",
-                                        ),
-                                        "studio_id",
-                                    ),
+                                Qualified(
+                                    "m",
+                                    "studio_id",
                                 ),
                             ),
                             Field(
                                 9,
-                                Some(
-                                    (
-                                        Some(
-                                            "s",
-                                        ),
-                                        "id",
-                                    ),
+                                Qualified(
+                                    "s",
+                                    "id",
                                 ),
                             ),
                         ),
                         Equal(
                             Field(
                                 9,
-                                Some(
-                                    (
-                                        Some(
-                                            "s",
-                                        ),
-                                        "id",
-                                    ),
+                                Qualified(
+                                    "s",
+                                    "id",
                                 ),
                             ),
                             Constant(
@@ -297,51 +410,35 @@ Plan: Plan(
                 outer: false,
             },
             expressions: [
-                (
-                    Field(
-                        1,
-                        Some(
-                            (
-                                Some(
-                                    "m",
-                                ),
-                                "title",
-                            ),
-                        ),
-                    ),
-                    None,
-                ),
-                (
-                    Field(
-                        8,
-                        Some(
-                            (
-                                Some(
-                                    "g",
-                                ),
-                                "name",
-                            ),
-                        ),
-                    ),
-                    Some(
-                        "genre",
+                Field(
+                    1,
+                    Qualified(
+                        "m",
+                        "title",
                     ),
                 ),
-                (
-                    Field(
-                        10,
-                        Some(
-                            (
-                                Some(
-                                    "s",
-                                ),
-                                "name",
-                            ),
-                        ),
+                Field(
+                    8,
+                    Qualified(
+                        "g",
+                        "name",
                     ),
-                    Some(
-                        "studio",
+                ),
+                Field(
+                    10,
+                    Qualified(
+                        "s",
+                        "name",
                     ),
+                ),
+            ],
+            labels: [
+                None,
+                Unqualified(
+                    "genre",
+                ),
+                Unqualified(
+                    "studio",
                 ),
             ],
         },
@@ -349,49 +446,53 @@ Plan: Plan(
             (
                 Field(
                     0,
-                    Some(
-                        (
-                            Some(
-                                "m",
-                            ),
-                            "title",
-                        ),
+                    Qualified(
+                        "m",
+                        "title",
                     ),
                 ),
                 Ascending,
             ),
         ],
     },
-)
+    labels: [
+        Qualified(
+            "m",
+            "title",
+        ),
+        Unqualified(
+            "genre",
+        ),
+        Unqualified(
+            "studio",
+        ),
+    ],
+}
 
-Optimized plan: Plan(
-    Order {
+Optimized plan: Select {
+    root: Order {
         source: Projection {
             source: HashJoin {
                 left: HashJoin {
                     left: Filter {
                         source: IndexLookup {
                             table: "movies",
-                            alias: Some(
-                                "m",
-                            ),
                             column: "studio_id",
                             values: [
                                 Integer(
                                     4,
                                 ),
                             ],
+                            alias: Some(
+                                "m",
+                            ),
                         },
                         predicate: Equal(
                             Field(
                                 3,
-                                Some(
-                                    (
-                                        Some(
-                                            "m",
-                                        ),
-                                        "genre_id",
-                                    ),
+                                Qualified(
+                                    "m",
+                                    "genre_id",
                                 ),
                             ),
                             Constant(
@@ -401,122 +502,84 @@ Optimized plan: Plan(
                             ),
                         ),
                     },
-                    left_field: (
-                        3,
-                        Some(
-                            (
-                                Some(
-                                    "m",
-                                ),
-                                "genre_id",
-                            ),
-                        ),
+                    left_field: 3,
+                    left_label: Qualified(
+                        "m",
+                        "genre_id",
                     ),
                     right: KeyLookup {
                         table: "genres",
-                        alias: Some(
-                            "g",
-                        ),
                         keys: [
                             Integer(
                                 1,
                             ),
                         ],
-                    },
-                    right_field: (
-                        0,
-                        Some(
-                            (
-                                Some(
-                                    "g",
-                                ),
-                                "id",
-                            ),
+                        alias: Some(
+                            "g",
                         ),
+                    },
+                    right_field: 0,
+                    right_label: Qualified(
+                        "g",
+                        "id",
                     ),
+                    right_size: 2,
                     outer: false,
                 },
-                left_field: (
-                    2,
-                    Some(
-                        (
-                            Some(
-                                "m",
-                            ),
-                            "studio_id",
-                        ),
-                    ),
+                left_field: 2,
+                left_label: Qualified(
+                    "m",
+                    "studio_id",
                 ),
                 right: KeyLookup {
                     table: "studios",
-                    alias: Some(
-                        "s",
-                    ),
                     keys: [
                         Integer(
                             4,
                         ),
                     ],
-                },
-                right_field: (
-                    0,
-                    Some(
-                        (
-                            Some(
-                                "s",
-                            ),
-                            "id",
-                        ),
+                    alias: Some(
+                        "s",
                     ),
+                },
+                right_field: 0,
+                right_label: Qualified(
+                    "s",
+                    "id",
                 ),
+                right_size: 3,
                 outer: false,
             },
             expressions: [
-                (
-                    Field(
-                        1,
-                        Some(
-                            (
-                                Some(
-                                    "m",
-                                ),
-                                "title",
-                            ),
-                        ),
-                    ),
-                    None,
-                ),
-                (
-                    Field(
-                        8,
-                        Some(
-                            (
-                                Some(
-                                    "g",
-                                ),
-                                "name",
-                            ),
-                        ),
-                    ),
-                    Some(
-                        "genre",
+                Field(
+                    1,
+                    Qualified(
+                        "m",
+                        "title",
                     ),
                 ),
-                (
-                    Field(
-                        10,
-                        Some(
-                            (
-                                Some(
-                                    "s",
-                                ),
-                                "name",
-                            ),
-                        ),
+                Field(
+                    8,
+                    Qualified(
+                        "g",
+                        "name",
                     ),
-                    Some(
-                        "studio",
+                ),
+                Field(
+                    10,
+                    Qualified(
+                        "s",
+                        "name",
                     ),
+                ),
+            ],
+            labels: [
+                None,
+                Unqualified(
+                    "genre",
+                ),
+                Unqualified(
+                    "studio",
                 ),
             ],
         },
@@ -524,18 +587,26 @@ Optimized plan: Plan(
             (
                 Field(
                     0,
-                    Some(
-                        (
-                            Some(
-                                "m",
-                            ),
-                            "title",
-                        ),
+                    Qualified(
+                        "m",
+                        "title",
                     ),
                 ),
                 Ascending,
             ),
         ],
     },
-)
+    labels: [
+        Qualified(
+            "m",
+            "title",
+        ),
+        Unqualified(
+            "genre",
+        ),
+        Unqualified(
+            "studio",
+        ),
+    ],
+}
 

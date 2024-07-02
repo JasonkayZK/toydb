@@ -59,7 +59,7 @@ on tables, rows, and indexes. This makes up the node's core storage engine.
 The SQL storage engine is wrapped in a Raft state machine interface, allowing it to be managed
 by the Raft consensus engine. The Raft node receives commands from clients and coordinates with
 other Raft nodes to reach consensus on an ordered command log. Once commands are committed to
-the log, they are sent to the state machine driver which applies them to the local state machine.
+the log, they are applied to the local state machine.
 
 On top of the Raft engine is a Raft-based SQL storage engine, which implements the SQL storage
 interface and submits commands to the Raft cluster. This allows the rest of the SQL layer to use
@@ -72,22 +72,32 @@ handles configuration, logging, and other process-level concerns.
 
 ## Storage Engine
 
-The storage engine is actually two different storage engines: key/value storage used by the SQL
-engine, and log-structured storage used by the Raft node. These are both pluggable via the
-`storage_sql` and `storage_raft` configuration options, and have multiple implementations with
-different characteristics.
-
-The SQL storage engine will be discussed separately in the [SQL section](#sql-engine).
+ToyDB uses a pluggable key/value storage engine, with the SQL and Raft storage engines configurable
+via the `storage_sql` and `storage_raft` options respectively. The higher-level SQL storage engine 
+will be discussed separately in the [SQL section](#sql-engine).
 
 ### Key/Value Storage
 
 A key/value storage engine stores arbitrary key/value pairs as binary byte slices, and implements
 the
-[`storage::kv::Store`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/kv/mod.rs) 
+[`storage::Engine`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/engine.rs) 
 trait:
 
 ```rust
-pub trait Store: Display + Send + Sync {
+/// A key/value storage engine, where both keys and values are arbitrary byte
+/// strings between 0 B and 2 GB, stored in lexicographical key order. Writes
+/// are only guaranteed durable after calling flush().
+///
+/// Only supports single-threaded use since all methods (including reads) take a
+/// mutable reference -- serialized access can't be avoided anyway, since both
+/// Raft execution and file access is serial.
+pub trait Engine: std::fmt::Display + Send + Sync {
+    /// The iterator returned by scan(). Traits can't return "impl Trait", and
+    /// we don't want to use trait objects, so the type must be specified.
+    type ScanIterator<'a>: DoubleEndedIterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a
+    where
+        Self: 'a;
+
     /// Deletes a key, or does nothing if it does not exist.
     fn delete(&mut self, key: &[u8]) -> Result<()>;
 
@@ -95,10 +105,10 @@ pub trait Store: Display + Send + Sync {
     fn flush(&mut self) -> Result<()>;
 
     /// Gets a value for a key, if it exists.
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+    fn get(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 
     /// Iterates over an ordered range of key/value pairs.
-    fn scan(&self, range: Range) -> Scan;
+    fn scan<R: std::ops::RangeBounds<Vec<u8>>>(&mut self, range: R) -> Self::ScanIterator<'_>;
 
     /// Sets a value for a key, replacing the existing value if any.
     fn set(&mut self, key: &[u8], value: Vec<u8>) -> Result<()>;
@@ -114,48 +124,44 @@ SQL table scans) and has a couple of important implications:
 
 * Keys should use an order-preserving byte encoding, to allow range scans.
 
-The store itself does not care what keys contain, but the module offers an order-preserving key
-encoding for use by higher layers. These storage layers often use composite keys made up of
-several possibly variable-length values (e.g. an index key consists of table, column, and
-value), and the natural ordering of each segment must be preserved, a property satisfied by this
-encoding:
+The engine itself does not care what keys contain, but the storage module offers
+an order-preserving key encoding called [KeyCode](https://github.com/erikgrinaker/toydb/blob/master/src/encoding/keycode.rs)
+for use by higher layers. These storage layers often use composite keys made up
+of several possibly variable-length values (e.g. an index key consists of table,
+column, and value), and the natural ordering of each segment must be preserved,
+a property satisfied by this encoding:
 
 * `bool`: `0x00` for `false`, `0x01` for `true`.
-* `Vec<u8>`: terminated with `0x0000`, `0x00` escaped as `0x00ff`.
+* `u64`: big-endian binary representation.
+* `i64`: big-endian binary representation, with sign bit flipped.
+* `f64`: big-endian binary representation, with sign bit flipped, and rest if negative.
+* `Vec<u8>`: `0x00` is escaped as `0x00ff`, terminated with `0x0000`.
 * `String`:  like `Vec<u8>`.
-* `u64`: Big-endian binary encoding.
-* `i64`: Big-endian binary encoding, sign bit flipped.
-* `f64`: Big-endian binary encoding, sign bit flipped if `+`, all flipped if `-`.
-* `sql::Value`: As above, with type prefix `0x00`=`Null`, `0x01`=`Boolean`, `0x02`=`Float`,
-  `0x03`=`Integer`, `0x04`=`String`
 
-The default key/value store is
-[`storage::kv::Memory`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/kv/memory.rs).
-This is an in-memory [B+tree](https://en.wikipedia.org/wiki/B%2B_tree), a search tree
-variant with multiple keys per node (to make use of cache locality) and values only in leaf nodes.
-As key/value pairs are added and removed, tree nodes are split, merged, and rotated to keep them 
-balanced and at least half-full.
+Additionally, several container types are supported:
 
-Although key/value data is stored in memory, toyDB provides durability via the Raft log which
-is persisted to disk. On startup, the Raft log is replayed to populate the in-memory store.
+* Tuple: concatenation of elements, with no surrounding structure.
+* Array: like tuple.
+* Vec: like tuple.
+* Enum: the variant's enum index as a single `u8` byte, then contents.
+* Value: like enum.
+
+The default key/value engine is
+[`storage::BitCask`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/bitcask.rs),
+a very simple variant of Bitcask, an append-only log-structured storage engine.
+All writes are appended to a log file, with an index mapping live keys to file
+positions maintained in memory.  When the amount of garbage (replaced or deleted
+keys) in the file exceeds 20%, a new log file is written containing only live
+keys, replacing the old log file.
 
 #### Key/Value Tradeoffs
 
-**In-memory storage:** storing key/value data in memory has much better performance and is
-simpler to implement than on-disk storage, but requires that the data set fits in memory.
-Replaying the Raft log on startup can also take considerable time for large data sets. However,
-as toyDB datasets are expected to be small, this is mostly advantageous.
+**Keyset in memory:** BitCask requires the entire key set to fit in memory, and must also scan
+the log file on startup to construct the key index.
 
-**Byte serialization:** since the primary storage is in memory, (de)serializing key/value
-pairs adds significant unnecessary overhead. However, at the outset it was not clear that toyDB
-would use in-memory storage, and byte slices is a simple interface that can be used regardless
-of storage medium.
-
-**B+tree scans:** B+trees often have pointers between neighboring leaf nodes for more efficient
-range scans, but toyDB's implementation does not. This would complicate the implementation, and
-the performance benefits are usually not as great in memory where random access latency is low.
-However, this along with other implementation details cause range scans to be O(log n) rather
-than O(1) per step.
+**Compaction volume:** unlike an LSM tree, this single-file BitCask
+implementation requires rewriting the entire dataset during compactions, which
+can produce significant write amplification over time.
 
 **Key encoding:** does not make use of any compression, e.g. variable-length integers, preferring
 simplicity and correctness.
@@ -168,38 +174,38 @@ is a relatively simple concurrency control mechanism that provides
 [snapshot isolation](https://en.wikipedia.org/wiki/Snapshot_isolation) without taking out locks or 
 having writes block reads. It also versions all data, allowing querying of historical data.
 
-toyDB implements MVCC at the key/value layer as
-[`storage::kv::MVCC`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/kv/mvcc.rs),
-using any `storage::kv::Store` implementation for underlying storage. `begin` returns a new
+toyDB implements MVCC at the storage layer as
+[`storage::mvcc::MVCC`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/mvcc.rs),
+using any `storage::Engine` implementation for underlying storage. `begin` returns a new
 transaction, which provides the usual key/value operations such as `get`, `set`, and `scan`.
 Additionally, it has a `commit` method which persists the changes and makes them visible to
 other transactions, and a `rollback` method which discards them.
 
-When a transaction begins, it fetches the next available transaction ID from `Key::TxnNext` and
-increments it, then records itself as an active transaction via `Key::TxnActive(id)`. It also
-takes a `Snapshot`, containing the IDs of all other active transactions as of the transaction start,
-and saves it as `Key::TxnSnapshot(id)`.
+When a transaction begins, it fetches the next available version from `Key::NextVersion` and
+increments it, then records itself as an active transaction via `Key::TxnActive(version)`. It also
+takes a snapshot of the active set, containing the versions of all other active transactions as of
+the transaction start, and saves it as `Key::TxnActiveSnapshot(id)`.
 
-Key/value pairs are saved as `Key::Record(key, version)`, where `key` is the user-provided key
-and `version` is the transaction ID which created the record. The visibility of key/value pairs
-for a transaction is given as follows:
+Key/value pairs are saved as `Key::Version(key, version)`, where `key` is the user-provided key
+and `version` is the transaction's version. The visibility of key/value pairs for a transaction is 
+given as follows:
 
-* For a given user key, do a reverse scan of `Key::Record(key, version)` starting at the current 
-  transaction's ID.
+* For a given user key, do a reverse scan of `Key::Version(key, version)` starting at the current 
+  transaction's version.
 
-* Skip any records whose version is in the list of active transaction IDs in the `Snapshot`.
+* Skip any records whose version is in the transaction's snapshot of the active set.
 
 * Return the first matching record, if any. This record may be either a `Some(value)` or a `None`
   if the key was deleted.
 
 When writing a key/value pair, the transaction first checks for any conflicts by scanning for a
-`Key::Record(key, version)` which is not visible to it. If one is found, a serialization error
+`Key::Version(key, version)` which is not visible to it. If one is found, a serialization error
 is returned and the client must retry the transaction. Otherwise, the transaction writes the new
-record and keeps track of the change as `Key::Update(id, key)` in case it must roll back later.
+record and keeps track of the change as `Key::TxnWrite(version, key)` in case it must roll back.
 
 When the transaction commits, it simply deletes its `Txn::Active(id)` record, thus making its
 changes visible to any subsequent transactions. If the transaction instead rolls back, it
-iterates over all `Key::Update(id, key)` entries and removes the written key/value records before
+iterates over all `Key::TxnWrite(id, key)` entries and removes the written key/value records before
 removing its `Txn::Active(id)` entry.
 
 This simple scheme is sufficient to provide ACID transaction guarantees with snapshot isolation:
@@ -207,14 +213,10 @@ commits are atomic, a transaction sees a consistent snapshot of the key/value st
 start of the transaction, and any write conflicts result in serialization errors which must be
 retried.
 
-To satisfy time travel queries, a read-only transaction simply loads the `Snapshot` entry of a
-past transaction and applies the same visibility rules as for normal transactions.
+To satisfy time travel queries, a read-only transaction simply loads the `Key::TxnActiveSnapshot`
+entry of a past transaction and applies the same visibility rules as for normal transactions.
 
 #### MVCC Tradeoffs
-
-**Read-only transaction IDs:** all transactions, even read-only transactions, are allocated a
-unique transaction ID. This means that a single standalone `SELECT` query will result in a write
-operation to increment the transaction ID counter, which can be expensive.
 
 **Serializability:** snapshot isolation is not fully serializable, since it exhibits
 [write skew anomalies](http://justinjaffray.com/what-does-write-skew-look-like/). This would
@@ -227,85 +229,15 @@ However, this also allows for complete data history, and simplifies the implemen
 **Transaction ID overflow:** transaction IDs will overflow after 64 bits, but this is never going to
 happen with toyDB.
 
-### Log-structured Storage
-
-The Raft node needs to keep a log of state machine commands encoded as arbitrary byte slices.
-This log is mostly append-only, and storing it in a random-access key/value store would be
-slower and more complex than using a log-structured store purpose-built for this access pattern.
-
-Log stores implement the [`storage::log::Store`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/log/mod.rs)
-trait, a subset of which includes:
-
-```rust
-pub trait Store: Display + Sync + Send {
-    /// Appends a log entry, returning its index.
-    fn append(&mut self, entry: Vec<u8>) -> Result<u64>;
-
-    /// Commits log entries up to and including the given index, making them immutable.
-    fn commit(&mut self, index: u64) -> Result<()>;
-
-    /// Fetches a log entry, if it exists.
-    fn get(&self, index: u64) -> Result<Option<Vec<u8>>>;
-
-    /// Iterates over an ordered range of log entries.
-    fn scan(&self, range: Range) -> Scan;
-
-    /// Truncates the log by removing any entries above the given index, and returns the
-    /// highest remaining index. Attempting to truncate a committed entry will error.
-    fn truncate(&mut self, index: u64) -> Result<u64>;
-}
-```
-
-The Raft node appends all received commands to its local log, but only commits entries once they
-are confirmed by consensus. The local log may need to be truncated, e.g. in the case of a leader
-change, removing a number of uncommitted entries.
-
-Additionally, the store must be able to store a handful of arbitrary key/value metadata pairs
-for the Raft node, via `set_metadata(key, value)` and `get_metadata(key)` methods.
-
-The default log store in toyDB is
-[`storage::log::Hybrid`](https://github.com/erikgrinaker/toydb/blob/master/src/storage/log/hybrid.rs),
-which stores uncommitted entries in memory and committed entries on disk. This allows the log to
-be written append-only and in order, giving very good performance both for writes and bulk
-reads. The number of uncommitted entries is also generally small since consensus is generally
-fast.
-
-New log entries are kept in a `VecDeque` (double-ended queue) until they are committed. On
-commit, entries are appended to the file with a `u32` length prefix, and the file is fsynced (if
-enabled). Entry positions are kept in an in-memory `HashMap` keyed by entry index, for
-retrieval, and this map is rebuilt on startup by scanning the log file.
-
-Metadata key/value pairs are kept in an in-memory `HashMap` and the entire hashmap is written to
-a separate file on every write.
-
-#### Log Tradeoffs
-
-**Startup log scan:** scanning the entire file on startup to build the entry index can be
-time-consuming, and the index requires a bit of memory. However, this avoids having to maintain
-separate index storage, which could be expensive to fsync, and data sets are expected to be small.
-
-**Metadata storage:** metadata key/value pairs should be stored in e.g. an on-disk B-tree
-key/value store, but toyDB current does not have such a store. However, the number of metadata items
-is very small - specifically 1: the current Raft term/vote tuple.
-
-**Memory buffering:** buffering uncommitted entries in memory may require a lot of memory if
-consensus halts, e.g. due to loss of quorum. However, for toyDB use-cases this is not a major
-problem, and it avoid having to do additional (possibly random) disk IO, greatly improving
-performance.
-
-**Garbage collection:** there is no garbage collection of old log entries, so the log will grow
-without bound. However, this is a necessity since the the default toyDB configuration uses
-in-memory key/value storage by default and there is no other durable storage.
-
 ## Raft Consensus Engine
 
 The Raft consensus protocol is explained well in the
 [original Raft paper](https://raft.github.io/raft.pdf), and will not be repeated here - refer to
 it for details. toyDB's implementation follows the paper fairly closely.
 
-The Raft node [`raft::Node`](https://github.com/erikgrinaker/toydb/tree/master/src/raft/node) is
+The Raft node [`raft::Node`](https://github.com/erikgrinaker/toydb/tree/master/src/raft/node.rs) is
 the core of the implementation, a finite state machine with enum variants for the node roles:
-leader, follower, and candidate. This enum wraps the `RoleNode` struct, which contains common
+leader, follower, and candidate. This enum wraps the `RawNode` struct, which contains common
 node functionality and is generic over the specific roles `Leader`, `Follower`, and `Candidate`
 that implement the Raft protocol.
 
@@ -318,26 +250,15 @@ methods are synchronous and may cause state transitions, e.g. changing a candida
 when it receives the winning vote.
 
 Nodes have a command log [`raft::Log`](https://github.com/erikgrinaker/toydb/blob/master/src/raft/log.rs),
-using a `storage::log::Store` for storage. Leaders receive client commands via request messages,
-replicate them to peers, and commit the commands to the log subject to consensus. Once a command is
-committed, is it applied to the state machine asynchronously.
-
-The Raft-managed state machine (i.e. the SQL storage engine) implements the
-[`raft::State`](https://github.com/erikgrinaker/toydb/blob/master/src/raft/state.rs) trait and
-is given to the node on initialization. The state machine driver
-[`raft::Driver`](https://github.com/erikgrinaker/toydb/blob/master/src/raft/state.rs) has
-ownership of the state machine, and runs in a separate thread (or rather, a
-[Tokio](https://tokio.rs) task) receiving instructions via an `mpsc` channel - this avoids
-long-running commands blocking the main Raft node from responding to messages.
-
-In addition to applying state machine commands, the driver also responds to client requests via
-an outbound `mpsc` channel. When the leader receives a state _mutation_ request from a client,
-it not only appends the command to its log, but it also tells the driver that the client is to
-be notified with the result once the command is applied. When the leader receives a state
-_query_ request, the state driver is notified about the query before the leader asks all peers
-to confirm that it is still the leader (required to satisfy linearizability). The confirmations
-are passed to the state machine driver, and once a majority vote is received the query is
-executed against the state machine and the result returned to the client.
+using a `storage::Engine` for storage, and a [`raft::State`](https://github.com/erikgrinaker/toydb/blob/master/src/raft/state.rs)
+state machine (the SQL engine). When the leader receives a write request, it appends the command
+to its local log and replicates it to followers. Once a quorum have replicated it, the command is
+committed and applied to the state machine, and the result returned the the client. When the leader
+receives a read request, it needs to ensure it is still the leader in order to satisfy 
+linearizability (a new leader could exist elsewhere resulting in a stale read). It increments a
+read sequence number and broadcasts it via a Raft heartbeat. Once a quorum have confirmed the
+leader at this sequence number, the read command is executed against the state machine and the
+result returned to the client.
 
 The actual network communication is handled by the server process, which will be described in a
 [separate section](#server).
@@ -347,6 +268,10 @@ The actual network communication is handled by the server process, which will be
 **Single-threaded state:** all state operations run in a single thread on the leader, preventing
 horizontal scalability. Improvements here would require running multiple sharded Raft clusters,
 which is out of scope for the project.
+
+**Synchronous application:** state machine application happens synchronously in the main Raft
+thread. This is significantly simpler than asynchronous application, but may cause delays in
+Raft processing.
 
 **Log replication:** only the simplest form of Raft log replication is implemented, without
 state snapshots or rapid log replay. Lagging nodes will be very slow to catch up.
@@ -716,10 +641,10 @@ length-prefixed [Bincode](https://github.com/servo/bincode)-encoded message pass
 
 The Raft server is split out to [`raft::Server`](https://github.com/erikgrinaker/toydb/blob/master/src/raft/server.rs),
 which runs a main [event loop](https://en.wikipedia.org/wiki/Event_loop) routing Raft messages 
-between the local Raft node, state machine driver, TCP peers, and local state machine clients (i.e. 
-the Raft SQL engine wrapper), as well as ticking the Raft logical clock at regular intervals. It 
-spawns separate Tokio tasks that maintain outbound TCP connections to all Raft peers, while 
-internal communication happens via `mpsc` channels.
+between the local Raft node, TCP peers, and local state machine clients (i.e. the Raft SQL engine 
+wrapper), as well as ticking the Raft logical clock at regular intervals. It spawns separate Tokio 
+tasks that maintain outbound TCP connections to all Raft peers, while internal communication 
+happens via `mpsc`channels.
 
 The SQL server spawns a new Tokio task for each SQL client that connects, running a separate
 SQL session from the SQL storage engine on top of Raft. It communicates with the client by passing
@@ -738,13 +663,7 @@ out of scope for the project.
 
 The toyDB [`Client`](https://github.com/erikgrinaker/toydb/blob/master/src/client.rs) provides a 
 simple API for interacting with a server, mainly by executing SQL statements via `execute()` 
-returning `sql::ResultSet`. It also has the convenience method `with_txn()`, taking a closure 
-that executes a series of SQL statements while automatically catching and retrying serialization
-errors.
-
-There is also `client::Pool`, which manages a set of pre-connected clients that can be retrieved
-for running short-lived queries in a multi-threaded application without incurring connection
-setup costs.
+returning `sql::ResultSet`.
 
 The [`toysql`](https://github.com/erikgrinaker/toydb/blob/master/src/bin/toysql.rs) command-line
 client is a simple REPL client that connects to a server using the toyDB `Client` and continually 

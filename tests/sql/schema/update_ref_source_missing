@@ -1,14 +1,19 @@
 Query: UPDATE source SET target_id = 9 WHERE id = 4
-Error: Value("Referenced primary key 9 in table target does not exist")
+Error: InvalidInput("reference 9 not in table target")
 
 Storage:
 CREATE TABLE source (
   id INTEGER PRIMARY KEY,
-  target_id INTEGER DEFAULT NULL REFERENCES target
+  target_id INTEGER DEFAULT NULL INDEX REFERENCES target
 )
 [Integer(1), Integer(1)]
 [Integer(2), Integer(2)]
 [Integer(4), Null]
+
+Index source.target_id
+Null => [Integer(4)]
+Integer(1) => [Integer(1)]
+Integer(2) => [Integer(2)]
 
 CREATE TABLE target (
   id INTEGER PRIMARY KEY,

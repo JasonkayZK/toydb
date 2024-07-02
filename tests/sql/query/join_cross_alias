@@ -116,11 +116,11 @@ AST: Select {
         },
     ],
     where: Some(
-        Operation(
+        Operator(
             And(
-                Operation(
+                Operator(
                     And(
-                        Operation(
+                        Operator(
                             GreaterThanOrEqual(
                                 Field(
                                     Some(
@@ -135,7 +135,7 @@ AST: Select {
                                 ),
                             ),
                         ),
-                        Operation(
+                        Operator(
                             Equal(
                                 Field(
                                     Some(
@@ -152,7 +152,7 @@ AST: Select {
                         ),
                     ),
                 ),
-                Operation(
+                Operator(
                     NotEqual(
                         Field(
                             Some(
@@ -177,37 +177,161 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Projection {
+Plan: Select {
+    root: Projection {
         source: Filter {
             source: NestedLoopJoin {
                 left: NestedLoopJoin {
                     left: Scan {
-                        table: "movies",
+                        table: Table {
+                            name: "movies",
+                            primary_key: 0,
+                            columns: [
+                                Column {
+                                    name: "id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: true,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "title",
+                                    datatype: String,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "studio_id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: true,
+                                    references: Some(
+                                        "studios",
+                                    ),
+                                },
+                                Column {
+                                    name: "genre_id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: true,
+                                    references: Some(
+                                        "genres",
+                                    ),
+                                },
+                                Column {
+                                    name: "released",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "rating",
+                                    datatype: Float,
+                                    nullable: true,
+                                    default: Some(
+                                        Null,
+                                    ),
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "ultrahd",
+                                    datatype: Boolean,
+                                    nullable: true,
+                                    default: Some(
+                                        Null,
+                                    ),
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                            ],
+                        },
+                        filter: None,
                         alias: Some(
                             "m",
                         ),
-                        filter: None,
                     },
                     left_size: 7,
                     right: Scan {
-                        table: "genres",
+                        table: Table {
+                            name: "genres",
+                            primary_key: 0,
+                            columns: [
+                                Column {
+                                    name: "id",
+                                    datatype: Integer,
+                                    nullable: false,
+                                    default: None,
+                                    unique: true,
+                                    index: false,
+                                    references: None,
+                                },
+                                Column {
+                                    name: "name",
+                                    datatype: String,
+                                    nullable: false,
+                                    default: None,
+                                    unique: false,
+                                    index: false,
+                                    references: None,
+                                },
+                            ],
+                        },
+                        filter: None,
                         alias: Some(
                             "g",
                         ),
-                        filter: None,
                     },
+                    right_size: 2,
                     predicate: None,
                     outer: false,
                 },
                 left_size: 9,
                 right: Scan {
-                    table: "countries",
+                    table: Table {
+                        name: "countries",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "name",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
+                    filter: None,
                     alias: Some(
                         "c",
                     ),
-                    filter: None,
                 },
+                right_size: 2,
                 predicate: None,
                 outer: false,
             },
@@ -217,13 +341,9 @@ Plan: Plan(
                         GreaterThan(
                             Field(
                                 0,
-                                Some(
-                                    (
-                                        Some(
-                                            "m",
-                                        ),
-                                        "id",
-                                    ),
+                                Qualified(
+                                    "m",
+                                    "id",
                                 ),
                             ),
                             Constant(
@@ -235,13 +355,9 @@ Plan: Plan(
                         Equal(
                             Field(
                                 0,
-                                Some(
-                                    (
-                                        Some(
-                                            "m",
-                                        ),
-                                        "id",
-                                    ),
+                                Qualified(
+                                    "m",
+                                    "id",
                                 ),
                             ),
                             Constant(
@@ -254,13 +370,9 @@ Plan: Plan(
                     Equal(
                         Field(
                             7,
-                            Some(
-                                (
-                                    Some(
-                                        "g",
-                                    ),
-                                    "id",
-                                ),
+                            Qualified(
+                                "g",
+                                "id",
                             ),
                         ),
                         Constant(
@@ -274,13 +386,9 @@ Plan: Plan(
                     Equal(
                         Field(
                             9,
-                            Some(
-                                (
-                                    Some(
-                                        "c",
-                                    ),
-                                    "id",
-                                ),
+                            Qualified(
+                                "c",
+                                "id",
                             ),
                         ),
                         Constant(
@@ -293,115 +401,176 @@ Plan: Plan(
             ),
         },
         expressions: [
-            (
-                Field(
-                    0,
-                    Some(
-                        (
-                            Some(
-                                "m",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                0,
+                Qualified(
+                    "m",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    1,
-                    Some(
-                        (
-                            Some(
-                                "m",
-                            ),
-                            "title",
-                        ),
-                    ),
+            Field(
+                1,
+                Qualified(
+                    "m",
+                    "title",
                 ),
-                None,
             ),
-            (
-                Field(
-                    7,
-                    Some(
-                        (
-                            Some(
-                                "g",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                7,
+                Qualified(
+                    "g",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    8,
-                    Some(
-                        (
-                            Some(
-                                "g",
-                            ),
-                            "name",
-                        ),
-                    ),
+            Field(
+                8,
+                Qualified(
+                    "g",
+                    "name",
                 ),
-                None,
             ),
-            (
-                Field(
-                    9,
-                    Some(
-                        (
-                            Some(
-                                "c",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                9,
+                Qualified(
+                    "c",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    10,
-                    Some(
-                        (
-                            Some(
-                                "c",
-                            ),
-                            "name",
-                        ),
-                    ),
+            Field(
+                10,
+                Qualified(
+                    "c",
+                    "name",
                 ),
-                None,
             ),
         ],
+        labels: [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
     },
-)
+    labels: [
+        Qualified(
+            "m",
+            "id",
+        ),
+        Qualified(
+            "m",
+            "title",
+        ),
+        Qualified(
+            "g",
+            "id",
+        ),
+        Qualified(
+            "g",
+            "name",
+        ),
+        Qualified(
+            "c",
+            "id",
+        ),
+        Qualified(
+            "c",
+            "name",
+        ),
+    ],
+}
 
-Optimized plan: Plan(
-    Projection {
+Optimized plan: Select {
+    root: Projection {
         source: NestedLoopJoin {
             left: NestedLoopJoin {
                 left: Scan {
-                    table: "movies",
-                    alias: Some(
-                        "m",
-                    ),
+                    table: Table {
+                        name: "movies",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "title",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "studio_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "studios",
+                                ),
+                            },
+                            Column {
+                                name: "genre_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "genres",
+                                ),
+                            },
+                            Column {
+                                name: "released",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "rating",
+                                datatype: Float,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "ultrahd",
+                                datatype: Boolean,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
                     filter: Some(
                         Or(
                             GreaterThan(
                                 Field(
                                     0,
-                                    Some(
-                                        (
-                                            Some(
-                                                "m",
-                                            ),
-                                            "id",
-                                        ),
+                                    Qualified(
+                                        "m",
+                                        "id",
                                     ),
                                 ),
                                 Constant(
@@ -413,13 +582,9 @@ Optimized plan: Plan(
                             Equal(
                                 Field(
                                     0,
-                                    Some(
-                                        (
-                                            Some(
-                                                "m",
-                                            ),
-                                            "id",
-                                        ),
+                                    Qualified(
+                                        "m",
+                                        "id",
                                     ),
                                 ),
                                 Constant(
@@ -430,40 +595,60 @@ Optimized plan: Plan(
                             ),
                         ),
                     ),
+                    alias: Some(
+                        "m",
+                    ),
                 },
                 left_size: 7,
                 right: KeyLookup {
                     table: "genres",
-                    alias: Some(
-                        "g",
-                    ),
                     keys: [
                         Integer(
                             2,
                         ),
                     ],
+                    alias: Some(
+                        "g",
+                    ),
                 },
+                right_size: 2,
                 predicate: None,
                 outer: false,
             },
             left_size: 9,
             right: Scan {
-                table: "countries",
-                alias: Some(
-                    "c",
-                ),
+                table: Table {
+                    name: "countries",
+                    primary_key: 0,
+                    columns: [
+                        Column {
+                            name: "id",
+                            datatype: String,
+                            nullable: false,
+                            default: None,
+                            unique: true,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "name",
+                            datatype: String,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                    ],
+                },
                 filter: Some(
                     Not(
                         Equal(
                             Field(
                                 0,
-                                Some(
-                                    (
-                                        Some(
-                                            "c",
-                                        ),
-                                        "id",
-                                    ),
+                                Qualified(
+                                    "c",
+                                    "id",
                                 ),
                             ),
                             Constant(
@@ -474,96 +659,92 @@ Optimized plan: Plan(
                         ),
                     ),
                 ),
+                alias: Some(
+                    "c",
+                ),
             },
+            right_size: 2,
             predicate: None,
             outer: false,
         },
         expressions: [
-            (
-                Field(
-                    0,
-                    Some(
-                        (
-                            Some(
-                                "m",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                0,
+                Qualified(
+                    "m",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    1,
-                    Some(
-                        (
-                            Some(
-                                "m",
-                            ),
-                            "title",
-                        ),
-                    ),
+            Field(
+                1,
+                Qualified(
+                    "m",
+                    "title",
                 ),
-                None,
             ),
-            (
-                Field(
-                    7,
-                    Some(
-                        (
-                            Some(
-                                "g",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                7,
+                Qualified(
+                    "g",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    8,
-                    Some(
-                        (
-                            Some(
-                                "g",
-                            ),
-                            "name",
-                        ),
-                    ),
+            Field(
+                8,
+                Qualified(
+                    "g",
+                    "name",
                 ),
-                None,
             ),
-            (
-                Field(
-                    9,
-                    Some(
-                        (
-                            Some(
-                                "c",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                9,
+                Qualified(
+                    "c",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    10,
-                    Some(
-                        (
-                            Some(
-                                "c",
-                            ),
-                            "name",
-                        ),
-                    ),
+            Field(
+                10,
+                Qualified(
+                    "c",
+                    "name",
                 ),
-                None,
             ),
         ],
+        labels: [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
     },
-)
+    labels: [
+        Qualified(
+            "m",
+            "id",
+        ),
+        Qualified(
+            "m",
+            "title",
+        ),
+        Qualified(
+            "g",
+            "id",
+        ),
+        Qualified(
+            "g",
+            "name",
+        ),
+        Qualified(
+            "c",
+            "id",
+        ),
+        Qualified(
+            "c",
+            "name",
+        ),
+    ],
+}
 

@@ -71,7 +71,7 @@ AST: Select {
                 },
                 type: Inner,
                 predicate: Some(
-                    Operation(
+                    Operator(
                         Equal(
                             Field(
                                 Some(
@@ -95,7 +95,7 @@ AST: Select {
             },
             type: Inner,
             predicate: Some(
-                Operation(
+                Operator(
                     Equal(
                         Field(
                             Some(
@@ -122,43 +122,135 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Projection {
+Plan: Select {
+    root: Projection {
         source: NestedLoopJoin {
             left: NestedLoopJoin {
                 left: Scan {
-                    table: "movies",
-                    alias: None,
+                    table: Table {
+                        name: "movies",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "title",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "studio_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "studios",
+                                ),
+                            },
+                            Column {
+                                name: "genre_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "genres",
+                                ),
+                            },
+                            Column {
+                                name: "released",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "rating",
+                                datatype: Float,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "ultrahd",
+                                datatype: Boolean,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
                     filter: None,
+                    alias: None,
                 },
                 left_size: 7,
                 right: Scan {
-                    table: "genres",
-                    alias: None,
+                    table: Table {
+                        name: "genres",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "name",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
                     filter: None,
+                    alias: None,
                 },
+                right_size: 2,
                 predicate: Some(
                     Equal(
                         Field(
                             3,
-                            Some(
-                                (
-                                    Some(
-                                        "movies",
-                                    ),
-                                    "genre_id",
-                                ),
+                            Qualified(
+                                "movies",
+                                "genre_id",
                             ),
                         ),
                         Field(
                             7,
-                            Some(
-                                (
-                                    Some(
-                                        "genres",
-                                    ),
-                                    "id",
-                                ),
+                            Qualified(
+                                "genres",
+                                "id",
                             ),
                         ),
                     ),
@@ -167,204 +259,338 @@ Plan: Plan(
             },
             left_size: 9,
             right: Scan {
-                table: "studios",
-                alias: None,
+                table: Table {
+                    name: "studios",
+                    primary_key: 0,
+                    columns: [
+                        Column {
+                            name: "id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: true,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "name",
+                            datatype: String,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "country_id",
+                            datatype: String,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "countries",
+                            ),
+                        },
+                    ],
+                },
                 filter: None,
+                alias: None,
             },
+            right_size: 3,
             predicate: Some(
                 Equal(
                     Field(
                         2,
-                        Some(
-                            (
-                                Some(
-                                    "movies",
-                                ),
-                                "studio_id",
-                            ),
+                        Qualified(
+                            "movies",
+                            "studio_id",
                         ),
                     ),
                     Field(
                         9,
-                        Some(
-                            (
-                                Some(
-                                    "studios",
-                                ),
-                                "id",
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-            outer: false,
-        },
-        expressions: [
-            (
-                Field(
-                    1,
-                    Some(
-                        (
-                            Some(
-                                "movies",
-                            ),
-                            "title",
-                        ),
-                    ),
-                ),
-                None,
-            ),
-            (
-                Field(
-                    8,
-                    Some(
-                        (
-                            Some(
-                                "genres",
-                            ),
-                            "name",
-                        ),
-                    ),
-                ),
-                Some(
-                    "genre",
-                ),
-            ),
-            (
-                Field(
-                    10,
-                    Some(
-                        (
-                            Some(
-                                "studios",
-                            ),
-                            "name",
-                        ),
-                    ),
-                ),
-                Some(
-                    "studio",
-                ),
-            ),
-        ],
-    },
-)
-
-Optimized plan: Plan(
-    Projection {
-        source: HashJoin {
-            left: HashJoin {
-                left: Scan {
-                    table: "movies",
-                    alias: None,
-                    filter: None,
-                },
-                left_field: (
-                    3,
-                    Some(
-                        (
-                            Some(
-                                "movies",
-                            ),
-                            "genre_id",
-                        ),
-                    ),
-                ),
-                right: Scan {
-                    table: "genres",
-                    alias: None,
-                    filter: None,
-                },
-                right_field: (
-                    0,
-                    Some(
-                        (
-                            Some(
-                                "genres",
-                            ),
+                        Qualified(
+                            "studios",
                             "id",
                         ),
                     ),
                 ),
-                outer: false,
-            },
-            left_field: (
-                2,
-                Some(
-                    (
-                        Some(
-                            "movies",
-                        ),
-                        "studio_id",
-                    ),
-                ),
-            ),
-            right: Scan {
-                table: "studios",
-                alias: None,
-                filter: None,
-            },
-            right_field: (
-                0,
-                Some(
-                    (
-                        Some(
-                            "studios",
-                        ),
-                        "id",
-                    ),
-                ),
             ),
             outer: false,
         },
         expressions: [
-            (
-                Field(
-                    1,
-                    Some(
-                        (
-                            Some(
-                                "movies",
-                            ),
-                            "title",
-                        ),
-                    ),
-                ),
-                None,
-            ),
-            (
-                Field(
-                    8,
-                    Some(
-                        (
-                            Some(
-                                "genres",
-                            ),
-                            "name",
-                        ),
-                    ),
-                ),
-                Some(
-                    "genre",
+            Field(
+                1,
+                Qualified(
+                    "movies",
+                    "title",
                 ),
             ),
-            (
-                Field(
-                    10,
-                    Some(
-                        (
-                            Some(
-                                "studios",
-                            ),
-                            "name",
-                        ),
-                    ),
+            Field(
+                8,
+                Qualified(
+                    "genres",
+                    "name",
                 ),
-                Some(
-                    "studio",
+            ),
+            Field(
+                10,
+                Qualified(
+                    "studios",
+                    "name",
                 ),
             ),
         ],
+        labels: [
+            None,
+            Unqualified(
+                "genre",
+            ),
+            Unqualified(
+                "studio",
+            ),
+        ],
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "title",
+        ),
+        Unqualified(
+            "genre",
+        ),
+        Unqualified(
+            "studio",
+        ),
+    ],
+}
+
+Optimized plan: Select {
+    root: Projection {
+        source: HashJoin {
+            left: HashJoin {
+                left: Scan {
+                    table: Table {
+                        name: "movies",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "title",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "studio_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "studios",
+                                ),
+                            },
+                            Column {
+                                name: "genre_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "genres",
+                                ),
+                            },
+                            Column {
+                                name: "released",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "rating",
+                                datatype: Float,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "ultrahd",
+                                datatype: Boolean,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
+                    filter: None,
+                    alias: None,
+                },
+                left_field: 3,
+                left_label: Qualified(
+                    "movies",
+                    "genre_id",
+                ),
+                right: Scan {
+                    table: Table {
+                        name: "genres",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "name",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
+                    filter: None,
+                    alias: None,
+                },
+                right_field: 0,
+                right_label: Qualified(
+                    "genres",
+                    "id",
+                ),
+                right_size: 2,
+                outer: false,
+            },
+            left_field: 2,
+            left_label: Qualified(
+                "movies",
+                "studio_id",
+            ),
+            right: Scan {
+                table: Table {
+                    name: "studios",
+                    primary_key: 0,
+                    columns: [
+                        Column {
+                            name: "id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: true,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "name",
+                            datatype: String,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "country_id",
+                            datatype: String,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "countries",
+                            ),
+                        },
+                    ],
+                },
+                filter: None,
+                alias: None,
+            },
+            right_field: 0,
+            right_label: Qualified(
+                "studios",
+                "id",
+            ),
+            right_size: 3,
+            outer: false,
+        },
+        expressions: [
+            Field(
+                1,
+                Qualified(
+                    "movies",
+                    "title",
+                ),
+            ),
+            Field(
+                8,
+                Qualified(
+                    "genres",
+                    "name",
+                ),
+            ),
+            Field(
+                10,
+                Qualified(
+                    "studios",
+                    "name",
+                ),
+            ),
+        ],
+        labels: [
+            None,
+            Unqualified(
+                "genre",
+            ),
+            Unqualified(
+                "studio",
+            ),
+        ],
+    },
+    labels: [
+        Qualified(
+            "movies",
+            "title",
+        ),
+        Unqualified(
+            "genre",
+        ),
+        Unqualified(
+            "studio",
+        ),
+    ],
+}
 

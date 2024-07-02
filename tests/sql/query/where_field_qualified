@@ -48,9 +48,9 @@ AST: Select {
         },
     ],
     where: Some(
-        Operation(
+        Operator(
             And(
-                Operation(
+                Operator(
                     GreaterThanOrEqual(
                         Field(
                             Some(
@@ -65,7 +65,7 @@ AST: Select {
                         ),
                     ),
                 ),
-                Operation(
+                Operator(
                     Equal(
                         Field(
                             Some(
@@ -90,21 +90,121 @@ AST: Select {
     limit: None,
 }
 
-Plan: Plan(
-    Projection {
+Plan: Select {
+    root: Projection {
         source: Filter {
             source: NestedLoopJoin {
                 left: Scan {
-                    table: "movies",
-                    alias: None,
+                    table: Table {
+                        name: "movies",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "title",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "studio_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "studios",
+                                ),
+                            },
+                            Column {
+                                name: "genre_id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: true,
+                                references: Some(
+                                    "genres",
+                                ),
+                            },
+                            Column {
+                                name: "released",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "rating",
+                                datatype: Float,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "ultrahd",
+                                datatype: Boolean,
+                                nullable: true,
+                                default: Some(
+                                    Null,
+                                ),
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
                     filter: None,
+                    alias: None,
                 },
                 left_size: 7,
                 right: Scan {
-                    table: "genres",
-                    alias: None,
+                    table: Table {
+                        name: "genres",
+                        primary_key: 0,
+                        columns: [
+                            Column {
+                                name: "id",
+                                datatype: Integer,
+                                nullable: false,
+                                default: None,
+                                unique: true,
+                                index: false,
+                                references: None,
+                            },
+                            Column {
+                                name: "name",
+                                datatype: String,
+                                nullable: false,
+                                default: None,
+                                unique: false,
+                                index: false,
+                                references: None,
+                            },
+                        ],
+                    },
                     filter: None,
+                    alias: None,
                 },
+                right_size: 2,
                 predicate: None,
                 outer: false,
             },
@@ -113,13 +213,9 @@ Plan: Plan(
                     GreaterThan(
                         Field(
                             0,
-                            Some(
-                                (
-                                    Some(
-                                        "movies",
-                                    ),
-                                    "id",
-                                ),
+                            Qualified(
+                                "movies",
+                                "id",
                             ),
                         ),
                         Constant(
@@ -131,13 +227,9 @@ Plan: Plan(
                     Equal(
                         Field(
                             0,
-                            Some(
-                                (
-                                    Some(
-                                        "movies",
-                                    ),
-                                    "id",
-                                ),
+                            Qualified(
+                                "movies",
+                                "id",
                             ),
                         ),
                         Constant(
@@ -150,13 +242,9 @@ Plan: Plan(
                 Equal(
                     Field(
                         7,
-                        Some(
-                            (
-                                Some(
-                                    "genres",
-                                ),
-                                "id",
-                            ),
+                        Qualified(
+                            "genres",
+                            "id",
                         ),
                     ),
                     Constant(
@@ -168,56 +256,127 @@ Plan: Plan(
             ),
         },
         expressions: [
-            (
-                Field(
-                    0,
-                    Some(
-                        (
-                            Some(
-                                "movies",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                0,
+                Qualified(
+                    "movies",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    7,
-                    Some(
-                        (
-                            Some(
-                                "genres",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                7,
+                Qualified(
+                    "genres",
+                    "id",
                 ),
-                None,
             ),
         ],
+        labels: [
+            None,
+            None,
+        ],
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "id",
+        ),
+        Qualified(
+            "genres",
+            "id",
+        ),
+    ],
+}
 
-Optimized plan: Plan(
-    Projection {
+Optimized plan: Select {
+    root: Projection {
         source: NestedLoopJoin {
             left: Scan {
-                table: "movies",
-                alias: None,
+                table: Table {
+                    name: "movies",
+                    primary_key: 0,
+                    columns: [
+                        Column {
+                            name: "id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: true,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "title",
+                            datatype: String,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "studio_id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "studios",
+                            ),
+                        },
+                        Column {
+                            name: "genre_id",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: true,
+                            references: Some(
+                                "genres",
+                            ),
+                        },
+                        Column {
+                            name: "released",
+                            datatype: Integer,
+                            nullable: false,
+                            default: None,
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "rating",
+                            datatype: Float,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                        Column {
+                            name: "ultrahd",
+                            datatype: Boolean,
+                            nullable: true,
+                            default: Some(
+                                Null,
+                            ),
+                            unique: false,
+                            index: false,
+                            references: None,
+                        },
+                    ],
+                },
                 filter: Some(
                     Or(
                         GreaterThan(
                             Field(
                                 0,
-                                Some(
-                                    (
-                                        Some(
-                                            "movies",
-                                        ),
-                                        "id",
-                                    ),
+                                Qualified(
+                                    "movies",
+                                    "id",
                                 ),
                             ),
                             Constant(
@@ -229,13 +388,9 @@ Optimized plan: Plan(
                         Equal(
                             Field(
                                 0,
-                                Some(
-                                    (
-                                        Some(
-                                            "movies",
-                                        ),
-                                        "id",
-                                    ),
+                                Qualified(
+                                    "movies",
+                                    "id",
                                 ),
                             ),
                             Constant(
@@ -246,50 +401,52 @@ Optimized plan: Plan(
                         ),
                     ),
                 ),
+                alias: None,
             },
             left_size: 7,
             right: KeyLookup {
                 table: "genres",
-                alias: None,
                 keys: [
                     Integer(
                         1,
                     ),
                 ],
+                alias: None,
             },
+            right_size: 2,
             predicate: None,
             outer: false,
         },
         expressions: [
-            (
-                Field(
-                    0,
-                    Some(
-                        (
-                            Some(
-                                "movies",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                0,
+                Qualified(
+                    "movies",
+                    "id",
                 ),
-                None,
             ),
-            (
-                Field(
-                    7,
-                    Some(
-                        (
-                            Some(
-                                "genres",
-                            ),
-                            "id",
-                        ),
-                    ),
+            Field(
+                7,
+                Qualified(
+                    "genres",
+                    "id",
                 ),
-                None,
             ),
         ],
+        labels: [
+            None,
+            None,
+        ],
     },
-)
+    labels: [
+        Qualified(
+            "movies",
+            "id",
+        ),
+        Qualified(
+            "genres",
+            "id",
+        ),
+    ],
+}
 
